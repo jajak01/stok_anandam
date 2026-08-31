@@ -38,7 +38,7 @@ class _ReminderCanvasingPageState extends State<ReminderCanvasingPage> {
       if (data is Map && data['data'] is List) {
         list = (data['data'] as List)
             .whereType<Map>()
-            .map((e) => Map<String, Object?>.from(e as Map))
+            .map((e) => Map<String, Object?>.from(e))
             .toList();
       }
       if (mounted) {
