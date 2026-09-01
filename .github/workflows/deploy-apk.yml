@@ -111,18 +111,22 @@ jobs:
             *) echo "❌ API_BASE_URL must be a plain URL starting with http:// or https:// (current value: $API_BASE_URL)" >&2; exit 1 ;;
           esac
           API_BASE_URL="${API_BASE_URL%/}"
+          JSON_BODY=$(cat <<EOF
+          {
+            "versionName": "${{ needs.extract-version.outputs.VERSION_NAME }}",
+            "versionCode": ${{ needs.extract-version.outputs.VERSION_CODE }},
+            "platform": "ANDROID",
+            "downloadUrl": "$API_BASE_URL/download/app-release-${{ needs.extract-version.outputs.VERSION_NAME }}.apk",
+            "releaseNotes": "Android update v${{ needs.extract-version.outputs.VERSION_NAME }}",
+            "isForceUpdate": false
+          }
+          EOF
+          )
           HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" \
             -X POST "$API_BASE_URL/api/v1/internal/app/publish" \
             -H "Content-Type: application/json" \
             -H "X-Internal-Key: ${{ secrets.INTERNAL_API_KEY }}" \
-            -d '{
-              "versionName": "${{ needs.extract-version.outputs.VERSION_NAME }}",
-              "versionCode": ${{ needs.extract-version.outputs.VERSION_CODE }},
-              "platform": "ANDROID",
-              "downloadUrl": "$API_BASE_URL/download/app-release-${{ needs.extract-version.outputs.VERSION_NAME }}.apk",
-              "releaseNotes": "Android update v${{ needs.extract-version.outputs.VERSION_NAME }}",
-              "isForceUpdate": false
-            }')
+            -d "$JSON_BODY")
           echo "HTTP Status: $HTTP_CODE"
           cat /tmp/response.json
           # 409 = version already published (re-run, or push + v* tag double-trigger) -> idempotent success
@@ -213,18 +217,22 @@ jobs:
             *) echo "❌ API_BASE_URL must be a plain URL starting with http:// or https:// (current value: $API_BASE_URL)" >&2; exit 1 ;;
           esac
           API_BASE_URL="${API_BASE_URL%/}"
+          JSON_BODY=$(cat <<EOF
+          {
+            "versionName": "${{ needs.extract-version.outputs.VERSION_NAME }}",
+            "versionCode": ${{ needs.extract-version.outputs.VERSION_CODE }},
+            "platform": "WINDOWS",
+            "downloadUrl": "$API_BASE_URL/download/stok_anandam.msix",
+            "releaseNotes": "Windows update v${{ needs.extract-version.outputs.VERSION_NAME }}",
+            "isForceUpdate": false
+          }
+          EOF
+          )
           HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" \
             -X POST "$API_BASE_URL/api/v1/internal/app/publish" \
             -H "Content-Type: application/json" \
             -H "X-Internal-Key: ${{ secrets.INTERNAL_API_KEY }}" \
-            -d '{
-              "versionName": "${{ needs.extract-version.outputs.VERSION_NAME }}",
-              "versionCode": ${{ needs.extract-version.outputs.VERSION_CODE }},
-              "platform": "WINDOWS",
-              "downloadUrl": "$API_BASE_URL/download/stok_anandam.msix",
-              "releaseNotes": "Windows update v${{ needs.extract-version.outputs.VERSION_NAME }}",
-              "isForceUpdate": false
-            }')
+            -d "$JSON_BODY")
           echo "HTTP Status: $HTTP_CODE"
           cat /tmp/response.json
           # 409 = version already published (re-run, or push + v* tag double-trigger) -> idempotent success
