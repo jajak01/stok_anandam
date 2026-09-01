@@ -9,6 +9,30 @@ rootProject.buildDir = "../build"
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
 }
+
+// Legacy plugins (e.g. flutter_keyboard_visibility 6.0.0) hardcode old compileSdk
+// values in their own build.gradle, which fails the AAR metadata check against the
+// current AndroidX / Flutter embedding. Override after evaluation so the plugin's
+// own value cannot clobber ours.
+subprojects {
+    afterEvaluate { project ->
+        if (project.plugins.hasPlugin("com.android.library") ||
+            project.plugins.hasPlugin("com.android.application")) {
+            project.android {
+                compileSdk = 36
+            }
+        }
+        // camera_android_camerax 0.6.x compiles against camera-core 1.5.3, which
+        // declares androidx.concurrent:concurrent-futures with `runtime` scope only.
+        // javac then fails ("class file for CallbackToFutureAdapter not found") while
+        // attaching type annotations on SurfaceRequest. Put it on the plugin's compile
+        // classpath.
+        if (project.name == "camera_android_camerax") {
+            project.dependencies.add("implementation", "androidx.concurrent:concurrent-futures:1.2.0")
+        }
+    }
+}
+
 subprojects {
     project.evaluationDependsOn(":app")
 }
