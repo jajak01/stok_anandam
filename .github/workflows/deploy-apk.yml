@@ -101,15 +101,25 @@ jobs:
 
       - name: Notify Spring Boot API (Android)
         run: |
+          API_BASE_URL="$(printf '%s' '${{ secrets.API_BASE_URL }}' | tr -d '[:space:]')"
+          if [ -z "$API_BASE_URL" ]; then
+            echo "❌ API_BASE_URL secret is empty or unset (check GitHub repo secrets)" >&2
+            exit 1
+          fi
+          case "$API_BASE_URL" in
+            http://*|https://*) ;;
+            *) echo "❌ API_BASE_URL must be a plain URL starting with http:// or https:// (current value: $API_BASE_URL)" >&2; exit 1 ;;
+          esac
+          API_BASE_URL="${API_BASE_URL%/}"
           HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" \
-            -X POST "${{ secrets.API_BASE_URL }}/api/v1/internal/app/publish" \
+            -X POST "$API_BASE_URL/api/v1/internal/app/publish" \
             -H "Content-Type: application/json" \
             -H "X-Internal-Key: ${{ secrets.INTERNAL_API_KEY }}" \
             -d '{
               "versionName": "${{ needs.extract-version.outputs.VERSION_NAME }}",
               "versionCode": ${{ needs.extract-version.outputs.VERSION_CODE }},
               "platform": "ANDROID",
-              "downloadUrl": "${{ secrets.API_BASE_URL }}/download/app-release-${{ needs.extract-version.outputs.VERSION_NAME }}.apk",
+              "downloadUrl": "$API_BASE_URL/download/app-release-${{ needs.extract-version.outputs.VERSION_NAME }}.apk",
               "releaseNotes": "Android update v${{ needs.extract-version.outputs.VERSION_NAME }}",
               "isForceUpdate": false
             }')
@@ -188,15 +198,25 @@ jobs:
       - name: Notify Spring Boot API (Windows)
         shell: bash
         run: |
+          API_BASE_URL="$(printf '%s' '${{ secrets.API_BASE_URL }}' | tr -d '[:space:]')"
+          if [ -z "$API_BASE_URL" ]; then
+            echo "❌ API_BASE_URL secret is empty or unset (check GitHub repo secrets)" >&2
+            exit 1
+          fi
+          case "$API_BASE_URL" in
+            http://*|https://*) ;;
+            *) echo "❌ API_BASE_URL must be a plain URL starting with http:// or https:// (current value: $API_BASE_URL)" >&2; exit 1 ;;
+          esac
+          API_BASE_URL="${API_BASE_URL%/}"
           HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" \
-            -X POST "${{ secrets.API_BASE_URL }}/api/v1/internal/app/publish" \
+            -X POST "$API_BASE_URL/api/v1/internal/app/publish" \
             -H "Content-Type: application/json" \
             -H "X-Internal-Key: ${{ secrets.INTERNAL_API_KEY }}" \
             -d '{
               "versionName": "${{ needs.extract-version.outputs.VERSION_NAME }}",
               "versionCode": ${{ needs.extract-version.outputs.VERSION_CODE }},
               "platform": "WINDOWS",
-              "downloadUrl": "${{ secrets.API_BASE_URL }}/download/stok_anandam.msix",
+              "downloadUrl": "$API_BASE_URL/download/stok_anandam.msix",
               "releaseNotes": "Windows update v${{ needs.extract-version.outputs.VERSION_NAME }}",
               "isForceUpdate": false
             }')
