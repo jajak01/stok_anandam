@@ -125,6 +125,11 @@ jobs:
             }')
           echo "HTTP Status: $HTTP_CODE"
           cat /tmp/response.json
+          # 409 = version already published (re-run, or push + v* tag double-trigger) -> idempotent success
+          if [ "$HTTP_CODE" -eq 409 ]; then
+            echo "ℹ️ Version already published (409) — treating as success"
+            exit 0
+          fi
           if [ "$HTTP_CODE" -ge 400 ]; then exit 1; fi
 
   # ─── Step 3: Build & Deploy Windows (independent) ───
@@ -222,4 +227,9 @@ jobs:
             }')
           echo "HTTP Status: $HTTP_CODE"
           cat /tmp/response.json
+          # 409 = version already published (re-run, or push + v* tag double-trigger) -> idempotent success
+          if [ "$HTTP_CODE" -eq 409 ]; then
+            echo "ℹ️ Version already published (409) — treating as success"
+            exit 0
+          fi
           if [ "$HTTP_CODE" -ge 400 ]; then exit 1; fi
