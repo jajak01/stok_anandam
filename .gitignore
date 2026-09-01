@@ -1,3 +1,8 @@
+# Sensitive local files (keystore, keys, generated secrets)
+.secrets/
+*.jks
+*.keystore
+
 # Miscellaneous
 *.class
 *.log
