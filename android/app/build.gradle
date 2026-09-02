@@ -12,7 +12,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.anandam.stok_anandam"
+    namespace = "com.example.stok_anandam"
     compileSdk = 36
     ndkVersion = "28.2.13676358"
 
@@ -27,7 +27,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.anandam.stok_anandam"
+        applicationId = "com.example.stok_anandam"
         minSdk = 24
         targetSdk = 34
         versionCode = flutter.versionCode
