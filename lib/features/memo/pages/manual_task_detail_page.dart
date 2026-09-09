@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:stok_anandam/features/shared/widgets/camera_screen.dart';
 import 'package:stok_anandam/core/widgets/action_slider.dart';
+import 'package:stok_anandam/core/services/delivery_location_binder.dart';
 import 'package:stok_anandam/data/api_new_endpoints.dart';
 import 'package:stok_anandam/data/models/penjadwalan.dart';
 import 'package:stok_anandam/features/memo/bloc/memo_bloc.dart';
@@ -60,32 +61,37 @@ class _ManualTaskDetailPageState extends State<ManualTaskDetailPage> {
 
           if (state is ManualTaskDetailLoaded) {
             final task = state.task;
-            return Scaffold(
-              backgroundColor: const Color(0xFFF8FAFC),
-              appBar: AppBar(
-                title: const Text('Detail Manual Request',
-                    style:
-                        TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                centerTitle: true,
-                elevation: 0,
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
-              ),
-              body: SingleChildScrollView(
-                padding: const EdgeInsets.only(bottom: 120),
-                child: Column(
-                  children: [
-                    _buildStatusHeader(task),
-                    _buildCustomerCard(task),
-                    if (task.statusJadwal == 'SELESAI' &&
-                        task.fotoBukti != null)
-                      _buildProofCard(task),
-                    _buildLogisticsCard(task, context),
-                    _buildLocationCard(task),
-                  ],
+            return DeliveryLocationBinder(
+              deliveryId: widget.id,
+              menuCode: 'MANUAL_TASK',
+              active: task.statusJadwal == 'DALAM_PENGIRIMAN',
+              child: Scaffold(
+                backgroundColor: const Color(0xFFF8FAFC),
+                appBar: AppBar(
+                  title: const Text('Detail Manual Request',
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                  centerTitle: true,
+                  elevation: 0,
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
                 ),
+                body: SingleChildScrollView(
+                  padding: const EdgeInsets.only(bottom: 120),
+                  child: Column(
+                    children: [
+                      _buildStatusHeader(task),
+                      _buildCustomerCard(task),
+                      if (task.statusJadwal == 'SELESAI' &&
+                          task.fotoBukti != null)
+                        _buildProofCard(task),
+                      _buildLogisticsCard(task, context),
+                      _buildLocationCard(task),
+                    ],
+                  ),
+                ),
+                bottomSheet: _buildStickyFooter(context, task),
               ),
-              bottomSheet: _buildStickyFooter(context, task),
             );
           }
 

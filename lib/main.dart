@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:stok_anandam/core/auth/current_user_store.dart';
 import 'package:stok_anandam/core/routing/app_router.dart';
+import 'package:stok_anandam/core/services/heartbeat_service.dart';
 import 'package:stok_anandam/core/theme/app_theme.dart';
 import 'injection.dart';
 import 'features/auth/bloc/auth_bloc.dart';
@@ -13,6 +14,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: '.env', isOptional: true);
   await setupLocator();
+  HeartbeatService.instance.start();
   runApp(const MyApp());
 }
 

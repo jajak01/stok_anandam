@@ -18,10 +18,12 @@ class DeliveryScannerPage extends StatefulWidget {
   State<DeliveryScannerPage> createState() => _DeliveryScannerPageState();
 }
 
-class _DeliveryScannerPageState extends State<DeliveryScannerPage> {
+class _DeliveryScannerPageState extends State<DeliveryScannerPage>
+    with WidgetsBindingObserver {
   MobileScannerController? controller;
   bool _isProcessing = false;
   bool _isFlashOn = false;
+  bool _pausedForNavigation = false;
 
   final FocusNode _focusNode = FocusNode();
   final FocusNode _manualInputFocusNode = FocusNode();
@@ -40,6 +42,7 @@ class _DeliveryScannerPageState extends State<DeliveryScannerPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _memoBloc = MemoBloc(getIt());
     controller = MobileScannerController(
       formats: const [BarcodeFormat.all],
@@ -52,7 +55,22 @@ class _DeliveryScannerPageState extends State<DeliveryScannerPage> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Kembali dari background: mulai ulang scanner (camera dilepas OS saat pause).
+      if (!_pausedForNavigation) {
+        controller?.start();
+      }
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      // Background: lepas kamera agar tidak konflik dengan mode kamera lain.
+      controller?.stop();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     controller?.dispose();
     _focusNode.dispose();
     _memoBloc.close();
@@ -388,12 +406,19 @@ class _DeliveryScannerPageState extends State<DeliveryScannerPage> {
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: () async {
+                  // Pause scanner dulu agar kamera tidak konflik saat pindah layar.
+                  _pausedForNavigation = true;
+                  await controller?.stop();
+                  if (!mounted) return;
                   await context.pushNamed(
                     AppRoutes.deliveryDetail,
                     pathParameters: {'id': result.memoId},
                   );
                   if (mounted) {
                     _resetScan();
+                    // Kembali dari detail: hidupkan scanner lagi.
+                    _pausedForNavigation = false;
+                    await controller?.start();
                   }
                 },
                 icon: const Icon(Icons.navigation_rounded),

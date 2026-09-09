@@ -2,7 +2,7 @@ name: stok_anandam
 description: "A new Flutter project."
 publish_to: 'none'
 
-version: 1.1.41+42
+version: 1.1.39+40
 
 environment:
   sdk: ^3.5.4
@@ -49,6 +49,7 @@ dependencies:
   pointycastle: ^4.0.0
   device_info_plus: ^12.4.0
   fl_chart: ^1.2.0
+  geolocator: ^14.0.2
 
 dev_dependencies:
   flutter_test:
@@ -79,7 +80,7 @@ msix_config:
   publisher_display_name: Anandam.id
   identity_name: com.example.stokanandam
   publisher: CN=Anandam, O=Anandam, L=Indonesia, S=DIY, C=ID
-  msix_version: 1.1.41.42
+  msix_version: 1.1.39.40
   logo_path: assets/images/Movva by Anandam.png
   capabilities: internetClient, location, camera
   install_certificate: false

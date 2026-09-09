@@ -25,6 +25,7 @@ class UserResponse {
      this.deviceCount,
      this.active,
      this.noHp,
+     this.permissions,
   });
 
   @JsonKey(
@@ -83,6 +84,13 @@ class UserResponse {
   )
   final String? noHp;
 
+  @JsonKey(
+    name: r'permissions',
+    required: false,
+    includeIfNull: false
+  )
+  final List<String>? permissions;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is UserResponse &&
      other.id == id &&
@@ -91,7 +99,8 @@ class UserResponse {
      other.role == role &&
      other.isOnline == isOnline &&
      other.deviceCount == deviceCount &&
-     other.active == active;
+     other.active == active &&
+     other.permissions == permissions;
 
   @override
   int get hashCode =>
@@ -101,7 +110,8 @@ class UserResponse {
     (role == null ? 0 : role.hashCode) +
     (isOnline == null ? 0 : isOnline.hashCode) +
     (deviceCount == null ? 0 : deviceCount.hashCode) +
-    (active == null ? 0 : active.hashCode);
+    (active == null ? 0 : active.hashCode) +
+    (permissions == null ? 0 : permissions.hashCode);
 
   factory UserResponse.fromJson(Map<String, dynamic> json) => _$UserResponseFromJson(json);
 

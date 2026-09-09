@@ -9,16 +9,38 @@ class CameraScreen extends StatefulWidget {
   State<CameraScreen> createState() => _CameraScreenState();
 }
 
-class _CameraScreenState extends State<CameraScreen> {
+class _CameraScreenState extends State<CameraScreen>
+    with WidgetsBindingObserver {
   CameraController? _controller;
   List<CameraDescription>? _cameras;
   bool _isInitialized = false;
   int _selectedCameraIndex = 0;
+  bool _wasInBackground = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initializeCamera();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Hanya satu kamera aktif per waktu: saat app di-background, lepas kamera
+    // agar tidak konflik dengan scanner/kamera lain (plan #15-#17, #38).
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused) {
+      _wasInBackground = true;
+      _disposeController();
+    } else if (state == AppLifecycleState.resumed && _wasInBackground) {
+      _wasInBackground = false;
+      // Re-init kamera setelah kembali ke foreground.
+      if (_cameras != null && _cameras!.isNotEmpty) {
+        _onNewCameraSelected(_cameras![_selectedCameraIndex]);
+      } else {
+        _initializeCamera();
+      }
+    }
   }
 
   Future<void> _initializeCamera() async {
@@ -33,9 +55,7 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Future<void> _onNewCameraSelected(CameraDescription cameraDescription) async {
-    if (_controller != null) {
-      await _controller!.dispose();
-    }
+    await _disposeController();
 
     _controller = CameraController(
       cameraDescription,
@@ -52,6 +72,23 @@ class _CameraScreenState extends State<CameraScreen> {
       }
     } catch (e) {
       debugPrint('Error initializing camera controller: $e');
+    }
+  }
+
+  Future<void> _disposeController() async {
+    final old = _controller;
+    _controller = null;
+    if (old != null) {
+      try {
+        await old.dispose();
+      } catch (e) {
+        debugPrint('Error disposing camera controller: $e');
+      }
+    }
+    if (mounted && _isInitialized) {
+      setState(() {
+        _isInitialized = false;
+      });
     }
   }
 
@@ -81,7 +118,8 @@ class _CameraScreenState extends State<CameraScreen> {
 
   @override
   void dispose() {
-    _controller?.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    _disposeController();
     super.dispose();
   }
 

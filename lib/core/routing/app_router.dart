@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:stok_anandam/core/auth/app_permissions.dart';
 import 'package:stok_anandam/data/models/memo.dart';
 import 'package:stok_anandam/features/canvas/canvas_page.dart';
 import 'package:stok_anandam/features/dashboard/dashboard_page.dart';
@@ -7,6 +8,8 @@ import 'package:stok_anandam/features/data_canvas/data_canvas_page.dart';
 import 'package:stok_anandam/features/auth/bloc/screens/login_page.dart';
 import 'package:stok_anandam/features/purchase/purchase_page.dart';
 import 'package:stok_anandam/features/sales/sales_page.dart';
+import 'package:stok_anandam/features/piutang/piutang_page.dart';
+import 'package:stok_anandam/features/hutang/hutang_page.dart';
 import 'package:stok_anandam/features/splash/splash_page.dart';
 import 'package:stok_anandam/features/stock/stock_page.dart';
 import 'package:stok_anandam/features/stock/stok_badan_page.dart';
@@ -64,6 +67,8 @@ class AppRoutes {
   static const String stok = '/stok';
   static const String penjualan = '/penjualan';
   static const String pembelian = '/pembelian';
+  static const String piutang = '/piutang';
+  static const String hutang = '/hutang';
   static const String tkdn = '/tkdn';
   static const String canvas = '/canvas';
   static const String dataCanvas = '/data_canvas';
@@ -137,26 +142,35 @@ final GoRouter appRouter = GoRouter(
 
     // If logged in and on login/splash, redirect to appropriate home page.
     if (hasToken && (isLoginRoute || location == AppRoutes.splash)) {
-      final userRole = getIt<CurrentUserStore>().userRole?.toUpperCase();
+      final userStore = getIt<CurrentUserStore>();
+      final userRole = userStore.userRole?.toUpperCase();
 
       // If role not yet loaded, don't redirect yet - let the app finish loading user info.
       if (userRole == null) return null;
 
-      // Management → Dashboard
-      if (userRole == 'MANAGER' ||
-          userRole == 'ADMIN' ||
-          userRole.startsWith('SPV_')) {
+      if (userStore.hasPermission(AppPermission.dashboard)) {
         return AppRoutes.dashboard;
       }
-      // Delivery & Teknisi → Pengantaran task list
-      if (userRole == 'TEKNISI' || userRole == 'DELIVERY') {
+      if (userStore.hasPermission(AppPermission.memo)) {
+        return AppRoutes.memo;
+      }
+      if (userStore.hasPermission(AppPermission.stok)) {
+        return AppRoutes.stok;
+      }
+      if (userStore.hasPermission(AppPermission.pengiriman)) {
         return AppRoutes.pengiriman;
       }
-      // Nota → Memo
-      if (userRole.contains('NOTA')) return AppRoutes.memo;
-      // Gudang & Marketing → Stok
-      if (userRole == 'GUDANG' || userRole.startsWith('MARKETING')) {
-        return AppRoutes.stok;
+      if (userStore.hasPermission(AppPermission.servis)) {
+        return AppRoutes.servis;
+      }
+      if (userStore.hasPermission(AppPermission.pembelian)) {
+        return AppRoutes.pembelian;
+      }
+      if (userStore.hasPermission(AppPermission.penjualan)) {
+        return AppRoutes.penjualan;
+      }
+      if (userStore.hasPermission(AppPermission.piutang)) {
+        return AppRoutes.piutang;
       }
 
       // Default for other logged-in users who don't have a specific home page
@@ -164,184 +178,141 @@ final GoRouter appRouter = GoRouter(
     }
 
     // From here on, we assume the user is logged in and not on login/splash.
-    final userRole = getIt<CurrentUserStore>().userRole?.toUpperCase();
+    final userStore = getIt<CurrentUserStore>();
+    final userRole = userStore.userRole?.toUpperCase();
 
     // If role not loaded yet, allow progress (page will handle loading)
     if (userRole == null) return null;
 
-    // RBAC: Role-based access control for specific pages
     if (location == AppRoutes.accessDenied) return null;
 
-    // Log Aktivitas: hanya untuk Manager & Admin
-    if (location == AppRoutes.activityLog) {
-      if (userRole == 'ADMIN' || userRole == 'MANAGER') {
-        return null;
-      }
-      return AppRoutes.accessDenied;
-    }
-
-    // 1. Manager, Admin & Spvs have full access
-    if (userRole == 'MANAGER' ||
-        userRole == 'ADMIN' ||
-        userRole.startsWith('SPV_')) {
+    // Common pages accessible by any logged-in user
+    if (location == AppRoutes.profile ||
+        location == AppRoutes.scanner ||
+        location == AppRoutes.camera ||
+        location == AppRoutes.biometricLogin) {
       return null;
     }
 
-    // Dashboard page: ONLY accessible to ADMIN and SPV roles.
+    // Manager & Admin always have full access
+    if (userRole == 'MANAGER' || userRole == 'ADMIN') {
+      return null;
+    }
+
+    // Checklist-based Permission Evaluation
+    bool can(String perm) => userStore.hasPermission(perm);
+
+    // 1. Dashboard & Laporan
     if (location == AppRoutes.dashboard) {
-      // If not Admin/SPV, redirect to stok
-      return AppRoutes.stok;
+      return can(AppPermission.dashboard) ? null : AppRoutes.accessDenied;
+    }
+    if (location == AppRoutes.laporanOmset) {
+      return can(AppPermission.laporanOmset) ? null : AppRoutes.accessDenied;
     }
 
-    // RBAC: Check Pengiriman Access specifically
-    if (location == AppRoutes.pengiriman) {
-      if (userRole == 'GUDANG' ||
-          userRole == 'DELIVERY' ||
-          userRole == 'TEKNISI' ||
-          userRole.startsWith('MARKETING')) {
-        return null;
-      }
-      return AppRoutes.accessDenied;
+    // 2. Stok & Logistik
+    if (location == AppRoutes.stok) {
+      return can(AppPermission.stok) ? null : AppRoutes.accessDenied;
     }
-    // if (location == AppRoutes.pengiriman ||
-    //     location == AppRoutes.mapPengantaran) {
-    //   if (userRole == 'GUDANG' ||
-    //       userRole == 'DELIVERY' ||
-    //       userRole == 'TEKNISI' ||
-    //       userRole.startsWith('MARKETING')) {
-    //     return null;
-    //   }
-    //   return AppRoutes.accessDenied;
-    // }
-
-    // 3. Marketing privileges (Sub-roles: TOKO, PROJECT, DISTRIBUSI)
-    if (userRole.startsWith('MARKETING')) {
-      final allowed = [
-        AppRoutes.stok,
-        AppRoutes.stokBadan,
-        AppRoutes.rakitan,
-        AppRoutes.tkdn,
-        AppRoutes.canvas,
-        AppRoutes.dataCanvas,
-        AppRoutes.memo,
-        AppRoutes.memoDetail,
-        AppRoutes.memoCreate,
-        AppRoutes.requestDelivery,
-        AppRoutes.requestDeliveryCreate,
-        AppRoutes.pengiriman,
-        AppRoutes.deliveryDetail,
-        // KOMENTAR: mapPengantaran dinonaktifkan sementara
-        // AppRoutes.mapPengantaran,
-        AppRoutes.camera,
-        AppRoutes.manualRequest,
-        AppRoutes.simulasi,
-      ];
-      if (allowed.contains(location) ||
-          location.startsWith('/memo/detail/') ||
-          location.startsWith('/pengantaran/detail/') ||
-          location.startsWith('/manual-task/')) {
-        return null;
-      }
+    if (location == AppRoutes.stokBadan) {
+      return can(AppPermission.stokBadan) || can(AppPermission.stok)
+          ? null
+          : AppRoutes.accessDenied;
+    }
+    if (location == AppRoutes.tkdn) {
+      return can(AppPermission.tkdn) ? null : AppRoutes.accessDenied;
+    }
+    if (location == AppRoutes.canvas) {
+      return can(AppPermission.canvas) ? null : AppRoutes.accessDenied;
+    }
+    if (location == AppRoutes.rakitan) {
+      return can(AppPermission.rakitan) ? null : AppRoutes.accessDenied;
+    }
+    if (location == AppRoutes.simulasi) {
+      return can(AppPermission.simulasiSpj) ? null : AppRoutes.accessDenied;
     }
 
-    // 4. Gudang privileges
-    if (userRole == 'GUDANG') {
-      final allowed = [
-        AppRoutes.dashboard,
-        AppRoutes.stok,
-        AppRoutes.stokBadan,
-        AppRoutes.rakitan,
-        AppRoutes.itemSn,
-        AppRoutes.memo,
-        AppRoutes.memoDetail,
-        AppRoutes.pengiriman,
-        '/pengiriman',
-        '/profile',
-        AppRoutes.profile,
-        AppRoutes.deliveryDetail,
-        AppRoutes.camera,
-      ];
-      if (allowed.contains(location) ||
-          location.startsWith('/memo/detail/') ||
-          location.startsWith('/pengantaran/detail/') ||
-          location.startsWith('/manual-task/')) {
-        return null;
-      }
+    // 3. Memo
+    if (location == AppRoutes.memo ||
+        location == AppRoutes.memoCreate ||
+        location.startsWith('/memo/detail/')) {
+      return can(AppPermission.memo) ? null : AppRoutes.accessDenied;
     }
 
-// 5. Delivery privileges
-    if (userRole == 'DELIVERY') {
-      final allowed = [
-        AppRoutes.memo,
-        AppRoutes.memoDetail,
-        AppRoutes.camera,
-        AppRoutes.pengiriman,
-        '/pengiriman',
-        AppRoutes.deliveryDetail,
-        AppRoutes.deliveryScanner,
-        // KOMENTAR: mapPengantaran dinonaktifkan sementara
-        // AppRoutes.mapPengantaran,
-      ];
-      if (allowed.contains(location) ||
-          location.startsWith('/memo/detail/') ||
-          location.startsWith('/pengantaran/detail/') ||
-          location.startsWith('/manual-task/')) {
-        return null;
-      }
+    // 4. Request Delivery & Pengiriman
+    if (location == AppRoutes.requestDelivery ||
+        location == AppRoutes.requestDeliveryCreate) {
+      return can(AppPermission.requestDelivery) ? null : AppRoutes.accessDenied;
+    }
+    if (location == AppRoutes.pengiriman ||
+        location == '/pengiriman' ||
+        location == AppRoutes.deliveryScanner ||
+        location.startsWith('/pengantaran/detail/')) {
+      return can(AppPermission.pengiriman) ? null : AppRoutes.accessDenied;
+    }
+    if (location == AppRoutes.manualRequest ||
+        location.startsWith('/manual-task/')) {
+      return can(AppPermission.penjadwalan) || can(AppPermission.pengiriman)
+          ? null
+          : AppRoutes.accessDenied;
     }
 
-    // 6. Teknisi privileges
-    if (userRole == 'TEKNISI') {
-      final allowed = [
-        AppRoutes.memo,
-        AppRoutes.memoDetail,
-        AppRoutes.camera,
-        AppRoutes.pengiriman,
-        '/pengiriman',
-        AppRoutes.deliveryDetail,
-        AppRoutes.deliveryScanner,
-        AppRoutes.servis,
-        AppRoutes.servisCreate,
-        AppRoutes.itemSn,
-        AppRoutes.oldItemSn,
-        AppRoutes.penjualan,
-        AppRoutes.oldSales,
-        AppRoutes.pembelian,
-        AppRoutes.oldPurchase,
-        AppRoutes.dataWarehouse,
-      ];
-      if (allowed.contains(location) ||
-          location.startsWith('/memo/detail/') ||
-          location.startsWith('/pengantaran/detail/') ||
-          location.startsWith('/manual-task/') ||
-          location.startsWith('/servis/detail/') ||
-          location.startsWith('/servis/scanner')) {
-        return null;
-      }
+    // 5. Pembelian & Penjualan
+    if (location == AppRoutes.pembelian || location == AppRoutes.oldPurchase) {
+      return can(AppPermission.pembelian) ? null : AppRoutes.accessDenied;
+    }
+    if (location == AppRoutes.penjualan || location == AppRoutes.oldSales) {
+      return can(AppPermission.penjualan) ? null : AppRoutes.accessDenied;
+    }
+    if (location == AppRoutes.piutang) {
+      return can(AppPermission.piutang) ? null : AppRoutes.accessDenied;
+    }
+    if (location == AppRoutes.hutang) {
+      return can(AppPermission.pembelian) ? null : AppRoutes.accessDenied;
+    }
+    if (location == AppRoutes.itemSn || location == AppRoutes.oldItemSn) {
+      return can(AppPermission.itemSn) ? null : AppRoutes.accessDenied;
+    }
+    if (location == AppRoutes.dataWarehouse) {
+      return can(AppPermission.dataWarehouse) ? null : AppRoutes.accessDenied;
+    }
+    if (location == AppRoutes.dataCanvas) {
+      return can(AppPermission.dataCanvas) ? null : AppRoutes.accessDenied;
+    }
+    if (location == AppRoutes.ijinImport) {
+      return can(AppPermission.ijinImport) ? null : AppRoutes.accessDenied;
+    }
+    if (location == AppRoutes.shbj) {
+      return can(AppPermission.shbj) ? null : AppRoutes.accessDenied;
+    }
+    if (location == AppRoutes.reminderCanvasing) {
+      return can(AppPermission.reminder) ? null : AppRoutes.accessDenied;
     }
 
-    // 7. Nota Role
-    if (userRole.contains('NOTA')) {
-      final allowed = [
-        AppRoutes.memo,
-        AppRoutes.memoDetail,
-        AppRoutes.profile,
-        AppRoutes.scanner,
-        AppRoutes.camera,
-      ];
-      if (allowed.contains(location) ||
-          location.startsWith('/memo/detail/') ||
-          location.startsWith('/manual-task/')) {
-        return null;
-      }
+    // 6. Servis
+    if (location == AppRoutes.servis ||
+        location == AppRoutes.servisCreate ||
+        location == AppRoutes.servisScanner ||
+        location.startsWith('/servis/detail/')) {
+      return can(AppPermission.servis) ? null : AppRoutes.accessDenied;
     }
 
-    // Default: Allow profile and scanner for everyone who is logged in
-    if (location == AppRoutes.profile || location == AppRoutes.scanner) {
-      return null;
+    // 7. Sistem & Pengaturan
+    if (location == AppRoutes.users) {
+      return can(AppPermission.users) ? null : AppRoutes.accessDenied;
+    }
+    if (location == AppRoutes.userActivity) {
+      return can(AppPermission.userActivity) ? null : AppRoutes.accessDenied;
+    }
+    if (location == AppRoutes.activityLog) {
+      return can(AppPermission.activityLog) ? null : AppRoutes.accessDenied;
+    }
+    if (location == AppRoutes.announcement ||
+        location == AppRoutes.announcementForm) {
+      return can(AppPermission.announcement) ? null : AppRoutes.accessDenied;
     }
 
-    return AppRoutes.accessDenied;
+    return null;
   },
   routes: <RouteBase>[
     GoRoute(
@@ -385,6 +356,18 @@ final GoRouter appRouter = GoRouter(
       name: AppRoutes.penjualan,
       pageBuilder: (context, state) =>
           _buildPage(state, AppRoutes.penjualan, const SalesPage()),
+    ),
+    GoRoute(
+      path: AppRoutes.piutang,
+      name: AppRoutes.piutang,
+      pageBuilder: (context, state) =>
+          _buildPage(state, AppRoutes.piutang, const PiutangPage()),
+    ),
+    GoRoute(
+      path: AppRoutes.hutang,
+      name: AppRoutes.hutang,
+      pageBuilder: (context, state) =>
+          _buildPage(state, AppRoutes.hutang, const HutangPage()),
     ),
     GoRoute(
       path: AppRoutes.laporanOmset,

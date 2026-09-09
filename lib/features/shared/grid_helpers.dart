@@ -253,6 +253,138 @@ class PurchaseGridHelper {
   }
 }
 
+/// Grid Piutang: satu baris = satu dokumen penjualan dgn status pembayaran.
+class PiutangGridHelper {
+  /// Kolom mengikuti halaman Penjualan + status bayar.
+  static List<PlutoColumn> getColumns(BuildContext context) {
+    return [
+      PlutoColumn(title: 'Tanggal', field: 'docDate', type: PlutoColumnType.text(), width: 120,
+          enableEditingMode: false, enableColumnDrag: false, textAlign: PlutoColumnTextAlign.left),
+      PlutoColumn(title: 'No Nota', field: 'docNo', type: PlutoColumnType.text(), width: 150,
+          enableEditingMode: false, enableColumnDrag: false, textAlign: PlutoColumnTextAlign.left),
+      PlutoColumn(title: 'Kode', field: 'code', type: PlutoColumnType.text(), width: 110,
+          enableEditingMode: false, enableColumnDrag: false, textAlign: PlutoColumnTextAlign.left),
+      PlutoColumn(title: 'Nama User', field: 'parName', type: PlutoColumnType.text(), width: 180,
+          enableEditingMode: false, enableColumnDrag: false, textAlign: PlutoColumnTextAlign.left),
+      PlutoColumn(title: 'Dept', field: 'depCode', type: PlutoColumnType.text(), width: 90,
+          enableEditingMode: false, enableColumnDrag: false, textAlign: PlutoColumnTextAlign.left),
+      PlutoColumn(title: 'Barang', field: 'itemName', type: PlutoColumnType.text(), width: 280,
+          enableEditingMode: false, enableColumnDrag: false, textAlign: PlutoColumnTextAlign.left),
+      PlutoColumn(title: 'Qty', field: 'qty', type: PlutoColumnType.number(), width: 80,
+          enableEditingMode: false, enableColumnDrag: false, textAlign: PlutoColumnTextAlign.right),
+      PlutoColumn(title: 'Harga', field: 'price', type: PlutoColumnType.currency(symbol: '', decimalDigits: 0, locale: 'id_ID'), width: 140,
+          enableEditingMode: false, enableColumnDrag: false, textAlign: PlutoColumnTextAlign.right),
+      PlutoColumn(title: 'Total', field: 'grandTotal', type: PlutoColumnType.currency(symbol: '', decimalDigits: 0, locale: 'id_ID'), width: 150,
+          enableEditingMode: false, enableColumnDrag: false, textAlign: PlutoColumnTextAlign.right),
+      PlutoColumn(title: 'Terbayar', field: 'paidTotal', type: PlutoColumnType.currency(symbol: '', decimalDigits: 0, locale: 'id_ID'), width: 140,
+          enableEditingMode: false, enableColumnDrag: false, textAlign: PlutoColumnTextAlign.right),
+      PlutoColumn(title: 'Status', field: 'statusBayar', type: PlutoColumnType.text(), width: 110,
+          enableEditingMode: false, enableColumnDrag: false, textAlign: PlutoColumnTextAlign.left),
+      PlutoColumn(title: 'Marketing', field: 'empCode', type: PlutoColumnType.text(), width: 120,
+          enableEditingMode: false, enableColumnDrag: false, textAlign: PlutoColumnTextAlign.left),
+    ];
+  }
+
+  static List<PlutoRow> mapToRows(List<PiutangItem> items) {
+    return items.map((s) {
+      return PlutoRow(cells: {
+        'docDate': PlutoCell(value: _fmtDate(s.docDate)),
+        'docNo': PlutoCell(value: s.docNo ?? '—'),
+        'code': PlutoCell(value: s.code ?? '—'),
+        'parName': PlutoCell(value: s.parName ?? '—'),
+        'depCode': PlutoCell(value: s.depCode ?? '—'),
+        'itemName': PlutoCell(value: s.itemName ?? '—'),
+        'qty': PlutoCell(value: s.qty),
+        'price': PlutoCell(value: _num(s.price)),
+        'grandTotal': PlutoCell(value: _num(s.grandTotal)),
+        'paidTotal': PlutoCell(value: _num(s.paidTotal)),
+        'statusBayar': PlutoCell(value: s.statusBayar ?? '—'),
+        'empCode': PlutoCell(value: s.empCode ?? '—'),
+      });
+    }).toList();
+  }
+
+  static String _fmtDate(Object? d) {
+    if (d == null) return '—';
+    try {
+      final date = DateTime.tryParse(d.toString());
+      if (date != null) {
+        return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+      }
+    } catch (_) {}
+    return d.toString();
+  }
+
+  static double _num(Object? x) {
+    if (x == null) return 0;
+    return double.tryParse(x.toString().replaceAll(RegExp(r'[^\d.-]'), '')) ?? 0;
+  }
+}
+
+class HutangGridHelper {
+  /// Kolom mengikuti halaman Pembelian + status bayar.
+  static List<PlutoColumn> getColumns(BuildContext context) {
+    return [
+      PlutoColumn(title: 'Tanggal', field: 'docDate', type: PlutoColumnType.text(), width: 120,
+          enableEditingMode: false, enableColumnDrag: false, textAlign: PlutoColumnTextAlign.left),
+      PlutoColumn(title: 'No Nota', field: 'docNoP', type: PlutoColumnType.text(), width: 160,
+          enableEditingMode: false, enableColumnDrag: false, textAlign: PlutoColumnTextAlign.left),
+      PlutoColumn(title: 'Distributor', field: 'parName', type: PlutoColumnType.text(), width: 200,
+          enableEditingMode: false, enableColumnDrag: false, textAlign: PlutoColumnTextAlign.left),
+      PlutoColumn(title: 'Dept', field: 'depCode', type: PlutoColumnType.text(), width: 90,
+          enableEditingMode: false, enableColumnDrag: false, textAlign: PlutoColumnTextAlign.left),
+      PlutoColumn(title: 'Barang', field: 'itemName', type: PlutoColumnType.text(), width: 280,
+          enableEditingMode: false, enableColumnDrag: false, textAlign: PlutoColumnTextAlign.left),
+      PlutoColumn(title: 'Qty', field: 'qty', type: PlutoColumnType.number(), width: 80,
+          enableEditingMode: false, enableColumnDrag: false, textAlign: PlutoColumnTextAlign.right),
+      PlutoColumn(title: 'Harga', field: 'price', type: PlutoColumnType.currency(symbol: '', decimalDigits: 0, locale: 'id_ID'), width: 140,
+          enableEditingMode: false, enableColumnDrag: false, textAlign: PlutoColumnTextAlign.right),
+      PlutoColumn(title: 'Total', field: 'grandTotal', type: PlutoColumnType.currency(symbol: '', decimalDigits: 0, locale: 'id_ID'), width: 150,
+          enableEditingMode: false, enableColumnDrag: false, textAlign: PlutoColumnTextAlign.right),
+      PlutoColumn(title: 'Terbayar', field: 'paidTotal', type: PlutoColumnType.currency(symbol: '', decimalDigits: 0, locale: 'id_ID'), width: 140,
+          enableEditingMode: false, enableColumnDrag: false, textAlign: PlutoColumnTextAlign.right),
+      PlutoColumn(title: 'Status', field: 'statusBayar', type: PlutoColumnType.text(), width: 110,
+          enableEditingMode: false, enableColumnDrag: false, textAlign: PlutoColumnTextAlign.left),
+      PlutoColumn(title: 'Marketing', field: 'empCode', type: PlutoColumnType.text(), width: 120,
+          enableEditingMode: false, enableColumnDrag: false, textAlign: PlutoColumnTextAlign.left),
+    ];
+  }
+
+  static List<PlutoRow> mapToRows(List<HutangItem> items) {
+    return items.map((s) {
+      return PlutoRow(cells: {
+        'docDate': PlutoCell(value: _fmtDate(s.docDate)),
+        'docNoP': PlutoCell(value: s.docNoP ?? '—'),
+        'parName': PlutoCell(value: s.parName ?? '—'),
+        'depCode': PlutoCell(value: s.depCode ?? '—'),
+        'itemName': PlutoCell(value: s.itemName ?? '—'),
+        'qty': PlutoCell(value: s.qty),
+        'price': PlutoCell(value: _num(s.price)),
+        'grandTotal': PlutoCell(value: _num(s.grandTotal)),
+        'paidTotal': PlutoCell(value: _num(s.paidTotal)),
+        'statusBayar': PlutoCell(value: s.statusBayar ?? '—'),
+        'empCode': PlutoCell(value: s.empCode ?? '—'),
+      });
+    }).toList();
+  }
+
+  static String _fmtDate(Object? d) {
+    if (d == null) return '—';
+    try {
+      final date = DateTime.tryParse(d.toString());
+      if (date != null) {
+        return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+      }
+    } catch (_) {}
+    return d.toString();
+  }
+
+  static double _num(Object? x) {
+    if (x == null) return 0;
+    return double.tryParse(x.toString().replaceAll(RegExp(r'[^\d.-]'), '')) ?? 0;
+  }
+}
+
 class ItemSnGridHelper {
   static List<PlutoColumn> getColumns(BuildContext context) {
     return [

@@ -510,7 +510,10 @@ class _PurchaseContentState extends State<_PurchaseContent>
                   _loadPurchases();
                 },
                 onExport: _exportToExcel,
-                isAdmin: getIt<CurrentUserStore>().userRole == 'ADMIN',
+                isAdmin: (getIt<CurrentUserStore>().userRole?.toUpperCase() ==
+                            'ADMIN' ||
+                        getIt<CurrentUserStore>().userRole?.toUpperCase() ==
+                            'MANAGER'),
                 content: RefreshIndicator(
                   onRefresh: _loadPurchases,
                   child: SingleChildScrollView(

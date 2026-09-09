@@ -20,6 +20,8 @@ UserRequest _$UserRequestFromJson(Map<String, dynamic> json) => $checkedCreate(
           password: $checkedConvert('password', (v) => v),
           role: $checkedConvert('role',
               (v) => $enumDecodeNullable(_$UserRequestRoleEnumEnumMap, v)),
+          permissions: $checkedConvert('permissions',
+              (v) => (v as List<dynamic>?)?.map((e) => e as String).toList()),
         );
         return val;
       },
@@ -31,6 +33,7 @@ Map<String, dynamic> _$UserRequestToJson(UserRequest instance) =>
       'username': instance.username,
       if (instance.password case final value?) 'password': value,
       'role': _$UserRequestRoleEnumEnumMap[instance.role],
+      if (instance.permissions case final value?) 'permissions': value,
     };
 
 const _$UserRequestRoleEnumEnumMap = {

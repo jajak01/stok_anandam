@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:stok_anandam/core/routing/app_router.dart';
+import 'package:stok_anandam/core/auth/current_user_store.dart';
+import 'package:stok_anandam/core/auth/app_permissions.dart';
+import 'package:stok_anandam/injection.dart';
 
 class AppSidebarModern extends StatelessWidget {
   const AppSidebarModern({
@@ -45,62 +48,47 @@ class AppSidebarModern extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDesktop = MediaQuery.sizeOf(context).width >= 1024;
+    final userStore = getIt<CurrentUserStore>();
+    bool can(String perm) => userStore.hasPermission(perm);
 
-    // 1. Definisikan kelompok menu sesuai urutan yang direquest
+    // 1. Definisikan kelompok menu sesuai hak akses granular (checklist permissions)
     final groups = <List<Widget>>[
       // --- GROUP 0: Dashboard & Laporan (Tetap ditaruh paling atas) ---
-      if (userRole == 'MANAGER' ||
-          userRole == 'ADMIN' ||
-          (userRole != null && userRole!.startsWith('SPV_')))
-        [
+      [
+        if (can(AppPermission.dashboard))
           _buildMenu(
               icon: Icons.dashboard_rounded,
               label: 'Dashboard',
               route: '/dashboard'),
-          if (userRole == 'MANAGER')
-            _buildMenu(
-                icon: Icons.assessment_rounded,
-                label: 'Laporan Omset Marketing',
-                route: AppRoutes.laporanOmset),
-        ],
+        if (can(AppPermission.laporanOmset))
+          _buildMenu(
+              icon: Icons.assessment_rounded,
+              label: 'Laporan Omset Marketing',
+              route: AppRoutes.laporanOmset),
+      ],
 
       // --- GROUP 1: STOK, TKDN, CANVAS, RAKITAN ---
       [
-        if (userRole != 'DELIVERY' &&
-            userRole != 'NOTA' &&
-            userRole != 'TEKNISI') ...[
+        if (can(AppPermission.stok))
           _buildMenu(
               icon: Icons.inventory_2_rounded, label: 'Stok', route: '/stok'),
+        if (can(AppPermission.stokBadan))
           _buildMenu(
               icon: Icons.apartment_rounded,
               label: 'Stok Badan',
               route: AppRoutes.stokBadan),
-        ],
-        if (userRole == 'ADMIN' ||
-            userRole == 'MANAGER' ||
-            userRole == 'SPV_MARKETING' ||
-            (userRole != null && userRole!.startsWith('MARKETING')))
+        if (can(AppPermission.tkdn))
           _buildMenu(
               icon: Icons.verified_rounded, label: 'TKDN', route: '/tkdn'),
-        if (userRole == 'ADMIN' ||
-            userRole == 'MANAGER' ||
-            userRole == 'SPV_MARKETING' ||
-            (userRole != null && userRole!.startsWith('MARKETING')))
+        if (can(AppPermission.canvas))
           _buildMenu(
               icon: Icons.palette_rounded, label: 'Canvas', route: '/canvas'),
-        if (userRole == 'ADMIN' ||
-            userRole == 'MANAGER' ||
-            userRole == 'SUPERVISOR' ||
-            userRole == 'SPV_MARKETING' ||
-            (userRole != null && userRole!.startsWith('MARKETING')))
+        if (can(AppPermission.rakitan))
           _buildMenu(
               icon: Icons.computer_rounded,
               label: 'Rakitan',
               route: '/rakitan'),
-        if (userRole == 'ADMIN' ||
-            userRole == 'MANAGER' ||
-            userRole == 'SPV_MARKETING' ||
-            (userRole != null && userRole!.startsWith('MARKETING')))
+        if (can(AppPermission.simulasiSpj))
           _buildMenu(
               icon: Icons.calculate_rounded,
               label: 'Simulasi SPJ',
@@ -109,22 +97,20 @@ class AppSidebarModern extends StatelessWidget {
 
       // --- GROUP 2: MEMO, REQUEST DELIVERY, PENGIRIMAN, PETA PENGANTARAN ---
       [
-        if (userRole != 'DELIVERY')
+        if (can(AppPermission.memo))
           _buildMenu(
               icon: Icons.assignment_rounded, label: 'Memo', route: '/memo'),
-        if (userRole == 'ADMIN' ||
-            userRole == 'MANAGER' ||
-            userRole == 'TEKNISI')
+        if (can(AppPermission.servis))
           _buildMenu(
               icon: Icons.miscellaneous_services_rounded,
               label: 'Servis',
               route: AppRoutes.servis),
-        if (userRole != null && userRole!.startsWith('MARKETING'))
+        if (can(AppPermission.requestDelivery))
           _buildMenu(
               icon: Icons.local_shipping_outlined,
               label: 'Request Delivery',
               route: AppRoutes.requestDelivery),
-        if (userRole == null || (userRole != 'NOTA' && userRole != 'TEKNISI'))
+        if (can(AppPermission.pengiriman))
           _buildMenu(
               icon: Icons.local_shipping_rounded,
               label: (userRole == 'DELIVERY' ||
@@ -132,57 +118,43 @@ class AppSidebarModern extends StatelessWidget {
                   ? 'Pengantaran'
                   : 'Pengiriman',
               route: '/pengiriman'),
-        // KOMENTAR: Menu Peta Pengantaran dinonaktifkan sementara
-        // untuk menggunakan pendekatan baru.
-        // if (userRole == 'ADMIN' ||
-        //     userRole == 'MANAGER' ||
-        //     userRole == 'GUDANG' ||
-        //     userRole == 'SPV_GUDANG' ||
-        //     userRole == 'DELIVERY')
-        //   _buildMenu(
-        //       icon: Icons.map_rounded,
-        //       label: 'Peta Pengantaran',
-        //       route: AppRoutes.mapPengantaran),
       ],
 
       // --- GROUP 3: PEMBELIAN, PENJUALAN, ITEM SN, DATA WAREHOUSE ---
       [
-        if (userRole == 'ADMIN' ||
-            userRole == 'MANAGER' ||
-            userRole == 'SUPERVISOR' ||
-            userRole == 'TEKNISI' ||
-            userRole == 'SPV_MARKETING')
+        if (can(AppPermission.pembelian))
           _buildMenu(
               icon: Icons.shopping_bag_rounded,
               label: 'Pembelian',
               route: '/pembelian'),
-        if (userRole == 'ADMIN' ||
-            userRole == 'MANAGER' ||
-            userRole == 'SUPERVISOR' ||
-            userRole == 'TEKNISI' ||
-            userRole == 'SPV_MARKETING')
+        if (can(AppPermission.penjualan))
           _buildMenu(
               icon: Icons.shopping_cart_rounded,
               label: 'Penjualan',
               route: '/penjualan'),
-        if (userRole == 'ADMIN' ||
-            userRole == 'MANAGER' ||
-            userRole == 'SPV_MARKETING' ||
-            userRole == 'TEKNISI')
+        if (can(AppPermission.piutang))
+          _buildMenu(
+              icon: Icons.receipt_long_rounded,
+              label: 'Piutang',
+              route: AppRoutes.piutang),
+        if (can(AppPermission.pembelian))
+          _buildMenu(
+              icon: Icons.account_balance_wallet_rounded,
+              label: 'Hutang',
+              route: AppRoutes.hutang),
+        if (can(AppPermission.itemSn))
           _buildMenu(
               icon: Icons.qr_code_scanner_rounded,
               label: 'Item SN',
               route: '/item-sn'),
-        if (userRole == 'ADMIN' || userRole == 'MANAGER')
+        if (can(AppPermission.ijinImport))
           _buildMenu(
               icon: Icons.directions_boat_filled_outlined,
               label: 'Ijin Import',
               route: AppRoutes.ijinImport),
-        if (userRole == 'ADMIN' || userRole == 'MANAGER')
+        if (can(AppPermission.shbj))
           _buildMenu(icon: Icons.task, label: 'SHBJ', route: AppRoutes.shbj),
-        if (userRole == 'ADMIN' ||
-            userRole == 'MANAGER' ||
-            userRole == 'TEKNISI')
+        if (can(AppPermission.dataWarehouse))
           _buildMenu(
               icon: Icons.warehouse_rounded,
               label: 'Data Warehouse',
@@ -191,32 +163,30 @@ class AppSidebarModern extends StatelessWidget {
 
       // --- GROUP 4: DATA CANVAS, USER, LOG AKTIVITAS ---
       [
-        if (userRole == 'ADMIN' ||
-            userRole == 'MANAGER' ||
-            userRole == 'SPV_MARKETING')
+        if (can(AppPermission.dataCanvas))
           _buildMenu(
               icon: Icons.analytics_rounded,
               label: 'Data Canvas',
               route: '/data_canvas'),
-        if (userRole == 'ADMIN' || userRole == 'MANAGER')
+        if (can(AppPermission.users))
           _buildMenu(
               icon: Icons.people_rounded, label: 'User', route: '/users'),
-        if (userRole == 'ADMIN' || userRole == 'MANAGER')
+        if (can(AppPermission.userActivity))
           _buildMenu(
               icon: Icons.people_alt_rounded,
               label: 'User Activity',
               route: AppRoutes.userActivity),
-        if (userRole == 'ADMIN' || userRole == 'MANAGER')
+        if (can(AppPermission.activityLog))
           _buildMenu(
               icon: Icons.history_rounded,
               label: 'Log Aktivitas',
               route: '/activity-log'),
-        if (userRole == 'ADMIN' || userRole == 'MANAGER')
+        if (can(AppPermission.announcement))
           _buildMenu(
               icon: Icons.campaign_rounded,
               label: 'Pengumuman',
               route: AppRoutes.announcement),
-        if (userRole == 'ADMIN' || userRole == 'MANAGER')
+        if (can(AppPermission.reminder))
           _buildMenu(
             icon: Icons.notifications_active_rounded,
             label: 'Reminder Canvasing',

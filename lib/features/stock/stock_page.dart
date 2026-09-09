@@ -57,6 +57,7 @@ class StockRow {
   StockRow({
     required this.stock,
     this.modal,
+    this.hargaButtom,
     this.finalPricelist,
     this.spesifikasi,
     this.warehouses = const [],
@@ -71,6 +72,7 @@ class StockRow {
 
   final Stock stock;
   final Object? modal;
+  final Object? hargaButtom;
   final Object? finalPricelist;
   final String? spesifikasi;
   final List<WarehouseStock> warehouses;
@@ -84,6 +86,7 @@ class StockRow {
   static StockRow fromJson(Map<String, dynamic> json) {
     final stock = Stock.fromJson(json);
     final modal = json['modal'];
+    final hargaButtom = json['hargaButtom'];
     final finalPricelist = json['final_pricelist'] ?? json['finalPricelist'];
     final spesifikasi = json['spesifikasi']?.toString().trim();
     final totalStok = int.tryParse(json['totalStok']?.toString() ?? '');
@@ -119,6 +122,7 @@ class StockRow {
     return StockRow(
       stock: stock,
       modal: modal,
+      hargaButtom: hargaButtom,
       finalPricelist: finalPricelist,
       spesifikasi: spesifikasi?.isEmpty == true ? null : spesifikasi,
       warehouses: warehouseList,
@@ -530,6 +534,7 @@ class _StockContentState extends State<_StockContent> with MigrationSyncMixin {
           row: StockRow(
             stock: detail,
             modal: row.modal,
+            hargaButtom: row.hargaButtom,
             finalPricelist: row.finalPricelist,
             spesifikasi: row.spesifikasi,
             warehouses: row.warehouses,
@@ -691,6 +696,13 @@ class _StockContentState extends State<_StockContent> with MigrationSyncMixin {
                             value: _str(s.itemName),
                             labelWidth: 120),
                         const Divider(),
+                        if (row.hargaButtom != null) ...[
+                          DetailRowWithCopy(
+                              label: 'Harga Bottom',
+                              value: _formatRupiah(row.hargaButtom),
+                              labelWidth: 120),
+                          const Divider(),
+                        ],
                         if (!isMarketing) ...[
                           DetailRowWithCopy(
                               label: 'Modal Awal',
@@ -1635,6 +1647,8 @@ static Widget _buildChip(String text, Color textColor, Color bgColor) {
           extraContent: _buildBookingBanner(row),
           rows: [
             (label: 'Stok', value: _v(row.totalStok ?? s.finalStok)),
+            if (row.hargaButtom != null)
+              (label: 'Harga Bottom', value: _rp(row.hargaButtom)),
             (label: 'Modal', value: modalStr),
             (label: 'Pricelist', value: pricelistStr)
           ],

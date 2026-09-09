@@ -12,6 +12,22 @@ class CurrentUserStore extends ChangeNotifier {
   String? get employeeCode => _me?.employeeCode;
   String? get username => _me?.username;
   int? get userId => _me?.id;
+  List<String> get permissions => _me?.permissions ?? const [];
+
+  /// Cek apakah user memiliki izin akses tertentu.
+  /// ADMIN dan MANAGER selalu memiliki seluruh izin akses.
+  bool hasPermission(String perm) {
+    final role = userRole?.toUpperCase();
+    if (role == 'ADMIN' || role == 'MANAGER') return true;
+    return _me?.permissions.contains(perm) ?? false;
+  }
+
+  /// Cek apakah user memiliki salah satu izin akses dari daftar yang diberikan.
+  bool hasAnyPermission(List<String> perms) {
+    final role = userRole?.toUpperCase();
+    if (role == 'ADMIN' || role == 'MANAGER') return true;
+    return perms.any((p) => _me?.permissions.contains(p) ?? false);
+  }
 
   /// Load dari API dan simpan. Panggil setelah login dan saat splash (jika ada token).
   Future<void> loadFromApi() async {

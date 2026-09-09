@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:stok_anandam/core/auth/current_user_store.dart';
 import 'package:stok_anandam/core/auth/global_state_resetter.dart';
+import 'package:stok_anandam/core/services/delivery_location_service.dart';
+import 'package:stok_anandam/core/services/heartbeat_service.dart';
 import 'package:stok_anandam/injection.dart';
 import 'package:stok_anandam/token_storage.dart';
 import 'package:my_api_client/my_api_client.dart';
@@ -46,6 +48,11 @@ class AuthService {
 
       // 3. Reset all static filter states
       GlobalStateResetter.resetAll();
+
+      // 4. Hentikan heartbeat (user tidak lagi login)
+      HeartbeatService.instance.stop();
+      // 5. Hentikan semua GPS tracking delivery (sisa queue tetap di-flush).
+      DeliveryLocationService.instance.stopAll();
       
       _isLoggingOut = false;
     }

@@ -9,10 +9,9 @@ import 'package:stok_anandam/data/models/memo.dart';
 import 'package:stok_anandam/data/models/penjadwalan.dart';
 import 'package:stok_anandam/data/models/request_delivery.dart';
 import 'package:stok_anandam/data/models/announcement.dart';
-import 'package:stok_anandam/data/models/request_delivery.dart';
-import 'package:stok_anandam/data/models/announcement.dart';
 
 import 'package:stok_anandam/features/stock/stok_badan_models.dart';
+import 'package:stok_anandam/core/auth/app_permissions.dart';
 
 /// Endpoint baru dari API (lihat docs/API_INTEGRATION.md) yang belum ada di client generated.
 /// Memakai Dio yang sama (baseUrl + auth) dari injection.
@@ -688,6 +687,40 @@ class ApiNewEndpoints {
                 UserAccount.fromJson(Map<String, dynamic>.from(e as Map)))
             .toList() ??
         [];
+  }
+
+  /// GET /api/v1/users/{id}/emp-scope
+  /// Mengambil daftar EMP_Code yang boleh dilihat/ditangani user.
+  Future<Set<String>> getUserEmpScope(Object id) async {
+    final response =
+        await _dio.get<Map<String, dynamic>>('/api/v1/users/$id/emp-scope');
+    final data = response.data?['data'];
+    if (data is List) {
+      return data
+          .map((e) => e?.toString().trim())
+          .where((s) => s != null && s.isNotEmpty)
+          .cast<String>()
+          .toSet();
+    }
+    return <String>{};
+  }
+
+  /// PUT /api/v1/users/{id}/emp-scope
+  Future<void> updateUserEmpScope(Object id, Set<String> empCodes) async {
+    await _dio.put(
+      '/api/v1/users/$id/emp-scope',
+      data: empCodes.toList(),
+    );
+  }
+
+  /// PUT /api/v1/users/{id}/toggle-status
+  Future<void> toggleUserStatus(Object id) async {
+    await _dio.patch('/api/v1/users/$id/toggle-status');
+  }
+
+  /// POST /api/v1/users/{id}/clear-sessions
+  Future<void> clearUserSessions(Object id) async {
+    await _dio.post('/api/v1/users/$id/clear-sessions');
   }
 
   /// PUT /api/v1/memos/{id}/gudang-finish (Sekarang tanpa request body)
@@ -1804,6 +1837,498 @@ class ApiNewEndpoints {
   Future<void> deliveryReleaseByMemoId(String memoId) async {
     await _dio.post('/api/v1/delivery/memo/$memoId/release');
   }
+
+  // ─── AUTH HEARTBEAT ───────────────────────────────────────────────
+  /// POST /api/v1/auth/heartbeat — kirim sinyal user masih aktif (online).
+  Future<void> heartbeat() async {
+    await _dio.post('/api/v1/auth/heartbeat');
+  }
+
+  // ─── PIUTANG ──────────────────────────────────────────────────────
+  /// GET /api/v1/piutang — row-level sales (seperti list Penjualan) + tab PAID/UNPAID
+  Future<PiutangListResult> getPiutang({
+    required String tab,
+    int page = 0,
+    int size = 50,
+    String sortBy = 'docDate',
+    String direction = 'desc',
+    DateTime? startDate,
+    DateTime? endDate,
+    List<String> empCodes = const [],
+    List<String> categories = const [],
+    String? search,
+    String? searchColumn,
+  }) async {
+    final query = <String, dynamic>{
+      'tab': tab,
+      'page': page,
+      'size': size,
+      'sortBy': sortBy,
+      'direction': direction,
+      if (startDate != null)
+        'startDate': startDate.toIso8601String().split('T').first,
+      if (endDate != null) 'endDate': endDate.toIso8601String().split('T').first,
+      if (empCodes.isNotEmpty) 'empCode': empCodes.join(','),
+      if (categories.isNotEmpty) 'categories': categories,
+      if (search != null && search.trim().isNotEmpty)
+        'search': search.trim(),
+      if (searchColumn != null && searchColumn.trim().isNotEmpty)
+        'searchColumn': searchColumn.trim(),
+    };
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/v1/piutang',
+      queryParameters: query,
+    );
+    return PiutangListResult.fromJson(response.data);
+  }
+
+  /// GET /api/v1/piutang/export — export Excel (ADMIN/MANAGER only).
+  Future<List<int>> exportPiutang({
+    required String tab,
+    DateTime? startDate,
+    DateTime? endDate,
+    List<String> empCodes = const [],
+    List<String> categories = const [],
+    String? search,
+    String? searchColumn,
+  }) async {
+    final query = <String, dynamic>{
+      'tab': tab,
+      if (startDate != null)
+        'startDate': startDate.toIso8601String().split('T').first,
+      if (endDate != null) 'endDate': endDate.toIso8601String().split('T').first,
+      if (empCodes.isNotEmpty) 'empCode': empCodes.join(','),
+      if (categories.isNotEmpty) 'categories': categories,
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      if (searchColumn != null && searchColumn.trim().isNotEmpty)
+        'searchColumn': searchColumn.trim(),
+    };
+    final response = await _dio.get<List<int>>(
+      '/api/v1/piutang/export',
+      queryParameters: query,
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return response.data ?? [];
+  }
+
+  /// GET /api/v1/piutang/employee-codes
+  Future<List<EmployeeOption>> getPiutangEmployeeCodes() async {
+    final response =
+        await _dio.get<Object>('/api/v1/piutang/employee-codes');
+    final data = response.data;
+    if (data is Map && data['data'] is List) {
+      return (data['data'] as List)
+          .map((e) => EmployeeOption.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+    return [];
+  }
+
+  /// GET /api/v1/piutang/categories
+  Future<List<String>> getPiutangCategories() async {
+    final response = await _dio.get<Object>('/api/v1/piutang/categories');
+    final data = response.data;
+    if (data is Map && data['data'] is List) {
+      return (data['data'] as List)
+          .map((e) => e?.toString().trim())
+          .where((s) => s != null && s.isNotEmpty)
+          .cast<String>()
+          .toList();
+    }
+    return [];
+  }
+
+  // ─── HUTANG ──────────────────────────────────────────────────────
+  /// GET /api/v1/hutang — row-level purchase (seperti list Pembelian) + tab PAID/UNPAID
+  Future<HutangListResult> getHutang({
+    required String tab,
+    int page = 0,
+    int size = 50,
+    String sortBy = 'docDate',
+    String direction = 'desc',
+    DateTime? startDate,
+    DateTime? endDate,
+    List<String> empCodes = const [],
+    List<String> categories = const [],
+    String? search,
+    String? searchColumn,
+  }) async {
+    final query = <String, dynamic>{
+      'tab': tab,
+      'page': page,
+      'size': size,
+      'sortBy': sortBy,
+      'direction': direction,
+      if (startDate != null)
+        'startDate': startDate.toIso8601String().split('T').first,
+      if (endDate != null) 'endDate': endDate.toIso8601String().split('T').first,
+      if (empCodes.isNotEmpty) 'empCode': empCodes.join(','),
+      if (categories.isNotEmpty) 'categories': categories,
+      if (search != null && search.trim().isNotEmpty)
+        'search': search.trim(),
+      if (searchColumn != null && searchColumn.trim().isNotEmpty)
+        'searchColumn': searchColumn.trim(),
+    };
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/v1/hutang',
+      queryParameters: query,
+    );
+    return HutangListResult.fromJson(response.data);
+  }
+
+  /// GET /api/v1/hutang/export — export Excel (ADMIN/MANAGER only).
+  Future<List<int>> exportHutang({
+    required String tab,
+    DateTime? startDate,
+    DateTime? endDate,
+    List<String> empCodes = const [],
+    List<String> categories = const [],
+    String? search,
+    String? searchColumn,
+  }) async {
+    final query = <String, dynamic>{
+      'tab': tab,
+      if (startDate != null)
+        'startDate': startDate.toIso8601String().split('T').first,
+      if (endDate != null) 'endDate': endDate.toIso8601String().split('T').first,
+      if (empCodes.isNotEmpty) 'empCode': empCodes.join(','),
+      if (categories.isNotEmpty) 'categories': categories,
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      if (searchColumn != null && searchColumn.trim().isNotEmpty)
+        'searchColumn': searchColumn.trim(),
+    };
+    final response = await _dio.get<List<int>>(
+      '/api/v1/hutang/export',
+      queryParameters: query,
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return response.data ?? [];
+  }
+
+  /// GET /api/v1/hutang/employee-codes
+  Future<List<EmployeeOption>> getHutangEmployeeCodes() async {
+    final response =
+        await _dio.get<Object>('/api/v1/hutang/employee-codes');
+    final data = response.data;
+    if (data is Map && data['data'] is List) {
+      return (data['data'] as List)
+          .map((e) => EmployeeOption.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+    return [];
+  }
+
+  /// GET /api/v1/hutang/categories
+  Future<List<String>> getHutangCategories() async {
+    final response = await _dio.get<Object>('/api/v1/hutang/categories');
+    final data = response.data;
+    if (data is Map && data['data'] is List) {
+      return (data['data'] as List)
+          .map((e) => e?.toString().trim())
+          .where((s) => s != null && s.isNotEmpty)
+          .cast<String>()
+          .toList();
+    }
+    return [];
+  }
+
+  // ─── LOCATION TRACKING ────────────────────────────────────────────
+  /// POST /api/v1/locations/track — kirim satu titik lokasi.
+  Future<Map<String, dynamic>?> trackLocation({
+    String? deliveryId,
+    String? menuCode,
+    required double latitude,
+    required double longitude,
+    double? accuracy,
+    DateTime? recordedAt,
+    String? clientEventId,
+  }) async {
+    final body = <String, dynamic>{
+      if (deliveryId != null && deliveryId.isNotEmpty) 'deliveryId': deliveryId,
+      if (menuCode != null && menuCode.isNotEmpty) 'menuCode': menuCode,
+      'latitude': latitude,
+      'longitude': longitude,
+      if (accuracy != null) 'accuracy': accuracy,
+      if (recordedAt != null) 'recordedAt': recordedAt.toIso8601String(),
+      if (clientEventId != null && clientEventId.isNotEmpty)
+        'clientEventId': clientEventId,
+    };
+    final response =
+        await _dio.post<Map<String, dynamic>>('/api/v1/locations/track',
+            data: body);
+    final data = response.data?['data'];
+    return data is Map ? Map<String, dynamic>.from(data) : null;
+  }
+
+  /// POST /api/v1/locations/track/batch — kirim batch titik lokasi (offline queue).
+  Future<void> trackLocationBatch(
+      List<Map<String, dynamic>> points) async {
+    if (points.isEmpty) return;
+    await _dio.post('/api/v1/locations/track/batch', data: points);
+  }
+
+  /// GET /api/v1/locations/history?deliveryId=&page=&size=
+  Future<List<LocationPoint>> getLocationHistory(
+    String deliveryId, {
+    int page = 0,
+    int size = 100,
+  }) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/v1/locations/history',
+      queryParameters: {'deliveryId': deliveryId, 'page': page, 'size': size},
+    );
+    final data = response.data?['data'];
+    final content = data is Map ? data['content'] : null;
+    if (content is List) {
+      return content
+          .whereType<Map>()
+          .map((e) => LocationPoint.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    }
+    return [];
+  }
+}
+
+/// Hasil GET /api/v1/piutang — konten per-doc + metadata paging.
+class PiutangListResult {
+  final List<PiutangItem> content;
+  final Object? totalGrandSum;
+  final int totalPages;
+  final int totalElements;
+
+  PiutangListResult({
+    required this.content,
+    this.totalGrandSum,
+    required this.totalPages,
+    required this.totalElements,
+  });
+
+  factory PiutangListResult.fromJson(Map<String, dynamic>? json) {
+    if (json == null) return PiutangListResult(content: [], totalPages: 0, totalElements: 0);
+    final data = json['data'];
+    if (data is! Map) {
+      return PiutangListResult(content: [], totalPages: 0, totalElements: 0);
+    }
+    final rawList = data['content'];
+    final items = rawList is List
+        ? rawList
+            .whereType<Map>()
+            .map((e) => PiutangItem.fromJson(Map<String, dynamic>.from(e)))
+            .toList()
+        : <PiutangItem>[];
+    final paging = json['paging'];
+    int totalPages = 0;
+    int totalElements = 0;
+    if (paging is Map) {
+      totalPages = int.tryParse(paging['totalPage']?.toString() ?? '0') ?? 0;
+      totalElements = int.tryParse(paging['totalItem']?.toString() ?? '0') ?? 0;
+    }
+    return PiutangListResult(
+      content: items,
+      totalGrandSum: data['totalGrandSum'],
+      totalPages: totalPages,
+      totalElements: totalElements,
+    );
+  }
+}
+
+/// Satu baris piutang = satu baris data penjualan (row-level, seperti list Penjualan).
+class PiutangItem {
+  final String? docNo;
+  final String? docDate;
+  final String? code;
+  final String? parName;
+  final String? depCode;
+  final String? depName;
+  final String? itemName;
+  final Object? qty;
+  final Object? price;
+  final Object? grandTotal;
+  final Object? paidTotal;
+  final String? statusBayar;
+  final String? empCode;
+  final String? empName;
+
+  PiutangItem({
+    this.docNo,
+    this.docDate,
+    this.code,
+    this.parName,
+    this.depCode,
+    this.depName,
+    this.itemName,
+    this.qty,
+    this.price,
+    this.grandTotal,
+    this.paidTotal,
+    this.statusBayar,
+    this.empCode,
+    this.empName,
+  });
+
+  factory PiutangItem.fromJson(Map<String, dynamic> json) {
+    return PiutangItem(
+      docNo: json['docNo']?.toString(),
+      docDate: json['docDate']?.toString(),
+      code: json['code']?.toString(),
+      parName: json['parName']?.toString(),
+      depCode: json['depCode']?.toString(),
+      depName: json['depName']?.toString(),
+      itemName: json['itemName']?.toString(),
+      qty: json['qty'],
+      price: json['price'],
+      grandTotal: json['grandTotal'],
+      paidTotal: json['paidTotal'],
+      statusBayar: json['statusBayar']?.toString(),
+      empCode: json['empCode']?.toString(),
+      empName: json['empName']?.toString(),
+    );
+  }
+}
+
+/// Hasil GET /api/v1/hutang — konten row-level purchase + metadata paging.
+class HutangListResult {
+  final List<HutangItem> content;
+  final Object? totalGrandSum;
+  final int totalPages;
+  final int totalElements;
+
+  HutangListResult({
+    required this.content,
+    this.totalGrandSum,
+    required this.totalPages,
+    required this.totalElements,
+  });
+
+  factory HutangListResult.fromJson(Map<String, dynamic>? json) {
+    if (json == null) {
+      return HutangListResult(content: [], totalPages: 0, totalElements: 0);
+    }
+    final data = json['data'];
+    if (data is! Map) {
+      return HutangListResult(content: [], totalPages: 0, totalElements: 0);
+    }
+    final rawList = data['content'];
+    final items = rawList is List
+        ? rawList
+            .whereType<Map>()
+            .map((e) => HutangItem.fromJson(Map<String, dynamic>.from(e)))
+            .toList()
+        : <HutangItem>[];
+    final paging = json['paging'];
+    int totalPages = 0;
+    int totalElements = 0;
+    if (paging is Map) {
+      totalPages = int.tryParse(paging['totalPage']?.toString() ?? '0') ?? 0;
+      totalElements = int.tryParse(paging['totalItem']?.toString() ?? '0') ?? 0;
+    }
+    return HutangListResult(
+      content: items,
+      totalGrandSum: data['totalGrandSum'],
+      totalPages: totalPages,
+      totalElements: totalElements,
+    );
+  }
+}
+
+/// Satu baris hutang = satu baris data pembelian (row-level, seperti list Pembelian).
+class HutangItem {
+  final String? docNoP;
+  final String? docDate;
+  final String? parName;
+  final String? depCode;
+  final String? depName;
+  final String? itemCode;
+  final String? itemName;
+  final Object? qty;
+  final Object? price;
+  final Object? grandTotal;
+  final Object? paidTotal;
+  final String? statusBayar;
+  final String? empCode;
+  final String? empName;
+
+  HutangItem({
+    this.docNoP,
+    this.docDate,
+    this.parName,
+    this.depCode,
+    this.depName,
+    this.itemCode,
+    this.itemName,
+    this.qty,
+    this.price,
+    this.grandTotal,
+    this.paidTotal,
+    this.statusBayar,
+    this.empCode,
+    this.empName,
+  });
+
+  factory HutangItem.fromJson(Map<String, dynamic> json) {
+    return HutangItem(
+      docNoP: json['docNoP']?.toString(),
+      docDate: json['docDate']?.toString(),
+      parName: json['parName']?.toString(),
+      depCode: json['depCode']?.toString(),
+      depName: json['depName']?.toString(),
+      itemCode: json['itemCode']?.toString(),
+      itemName: json['itemName']?.toString(),
+      qty: json['qty'],
+      price: json['price'],
+      grandTotal: json['grandTotal'],
+      paidTotal: json['paidTotal'],
+      statusBayar: json['statusBayar']?.toString(),
+      empCode: json['empCode']?.toString(),
+      empName: json['empName']?.toString(),
+    );
+  }
+}
+
+/// Satu titik lokasi dari riwayat /api/v1/locations/history.
+class LocationPoint {
+  final int? id;
+  final int? userId;
+  final String? username;
+  final String? deliveryId;
+  final String? menuCode;
+  final double? latitude;
+  final double? longitude;
+  final double? accuracy;
+  final DateTime? recordedAt;
+  final DateTime? receivedAt;
+
+  LocationPoint({
+    this.id,
+    this.userId,
+    this.username,
+    this.deliveryId,
+    this.menuCode,
+    this.latitude,
+    this.longitude,
+    this.accuracy,
+    this.recordedAt,
+    this.receivedAt,
+  });
+
+  factory LocationPoint.fromJson(Map<String, dynamic> json) {
+    return LocationPoint(
+      id: int.tryParse(json['id']?.toString() ?? ''),
+      userId: int.tryParse(json['userId']?.toString() ?? ''),
+      username: json['username']?.toString(),
+      deliveryId: json['deliveryId']?.toString(),
+      menuCode: json['menuCode']?.toString(),
+      latitude: double.tryParse(json['latitude']?.toString() ?? ''),
+      longitude: double.tryParse(json['longitude']?.toString() ?? ''),
+      accuracy: double.tryParse(json['accuracy']?.toString() ?? ''),
+      recordedAt: json['recordedAt'] != null
+          ? DateTime.tryParse(json['recordedAt'].toString())
+          : null,
+      receivedAt: json['receivedAt'] != null
+          ? DateTime.tryParse(json['receivedAt'].toString())
+          : null,
+    );
+  }
 }
 
 class ItemSuggestion {
@@ -1905,13 +2430,15 @@ class ActivityLog {
 
 /// Hasil GET /api/v1/auth/me (nama, username, role, noHp).
 class AuthMeResult {
-  AuthMeResult(
-      {this.id,
-      this.nama,
-      this.username,
-      this.role,
-      this.employeeCode,
-      this.noHp});
+  AuthMeResult({
+    this.id,
+    this.nama,
+    this.username,
+    this.role,
+    this.employeeCode,
+    this.noHp,
+    this.permissions = const [],
+  });
 
   final int? id;
   final String? nama;
@@ -1919,16 +2446,33 @@ class AuthMeResult {
   final String? role;
   final String? employeeCode;
   final String? noHp;
+  final List<String> permissions;
 
   factory AuthMeResult.fromJson(Map<String, dynamic> json) {
     debugPrint('[ApiNewEndpoints] AuthMeResult.fromJson: $json');
+
+    final rawPerms = json['permissions'];
+    List<String> perms = [];
+    if (rawPerms is List) {
+      perms = rawPerms.map((e) => e.toString()).toList();
+    } else if (json['authorities'] is List) {
+      perms = (json['authorities'] as List)
+          .map((e) => e.toString().replaceAll('ROLE_', ''))
+          .toList();
+    }
+    final roleStr = json['role']?.toString().trim();
+    if (perms.isEmpty && roleStr != null) {
+      perms = AppPermission.getDefaultPermissions(roleStr);
+    }
+
     return AuthMeResult(
       id: int.tryParse(json['id']?.toString() ?? ''),
       nama: json['nama']?.toString().trim(),
       username: json['username']?.toString().trim(),
-      role: json['role']?.toString().trim(),
+      role: roleStr,
       employeeCode: json['employeeCode']?.toString().trim(),
       noHp: json['noHp']?.toString().trim(),
+      permissions: perms,
     );
   }
 

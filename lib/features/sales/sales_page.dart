@@ -499,7 +499,10 @@ class _SalesContentState extends State<_SalesContent> with MigrationSyncMixin {
                   _loadSales();
                 },
                 onExport: _exportToExcel,
-                isAdmin: getIt<CurrentUserStore>().userRole == 'ADMIN',
+                isAdmin: (getIt<CurrentUserStore>().userRole?.toUpperCase() ==
+                            'ADMIN' ||
+                        getIt<CurrentUserStore>().userRole?.toUpperCase() ==
+                            'MANAGER'),
                 content: RefreshIndicator(
                   onRefresh: _loadSales,
                   child: SingleChildScrollView(

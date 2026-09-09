@@ -21,6 +21,8 @@ UserResponse _$UserResponseFromJson(Map<String, dynamic> json) =>
           deviceCount: $checkedConvert('deviceCount', (v) => v as int?),
           active: $checkedConvert('active', (v) => v as bool?),
           noHp: $checkedConvert('noHp', (v) => v as String?),
+          permissions: $checkedConvert('permissions',
+              (v) => (v as List<dynamic>?)?.map((e) => e as String).toList()),
         );
         return val;
       },
@@ -37,6 +39,7 @@ Map<String, dynamic> _$UserResponseToJson(UserResponse instance) =>
       if (instance.deviceCount case final value?) 'deviceCount': value,
       if (instance.active case final value?) 'active': value,
       if (instance.noHp case final value?) 'noHp': value,
+      if (instance.permissions case final value?) 'permissions': value,
     };
 
 const _$UserResponseRoleEnumEnumMap = {

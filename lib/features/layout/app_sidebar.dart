@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:stok_anandam/core/routing/app_router.dart';
+import 'package:stok_anandam/core/auth/current_user_store.dart';
+import 'package:stok_anandam/core/auth/app_permissions.dart';
+import 'package:stok_anandam/injection.dart';
 
 class AppSidebar extends StatelessWidget {
   const AppSidebar({
@@ -35,114 +38,105 @@ class AppSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final userStore = getIt<CurrentUserStore>();
+    bool can(String perm) => userStore.hasPermission(perm);
+
     // 1. Definisikan menu per kelompok (group)
-    // Gunakan collection-if untuk filter berdasarkan hak akses (role)
     final groups = <List<Widget>>[
-      // --- GROUP 0: Dashboard (Bawaan sebelumnya) ---
-      if (userRole == 'ADMIN' ||
-          (userRole != null && userRole!.startsWith('SPV_')))
-        [
+      // --- GROUP 0: Dashboard & Laporan ---
+      [
+        if (can(AppPermission.dashboard))
           _buildMenu(
               icon: Icons.dashboard, label: 'Dashboard', route: '/dashboard'),
-          if (userRole == 'MANAGER')
-            _buildMenu(
-                icon: Icons.assessment_rounded,
-                label: 'Laporan Omset Marketing',
-                route: AppRoutes.laporanOmset),
-        ],
+        if (can(AppPermission.laporanOmset))
+          _buildMenu(
+              icon: Icons.assessment_rounded,
+              label: 'Laporan Omset Marketing',
+              route: AppRoutes.laporanOmset),
+      ],
 
       // --- GROUP 1: Stok, TKDN, Canvas, Rakitan ---
       [
-        if (userRole != 'DELIVERY' &&
-            userRole != 'NOTA' &&
-            userRole != 'TEKNISI')
+        if (can(AppPermission.stok))
           _buildMenu(icon: Icons.storage, label: 'Stok', route: '/stok'),
-        _buildMenu(icon: Icons.verified, label: 'TKDN', route: '/tkdn'),
-        _buildMenu(icon: Icons.palette, label: 'Canvas', route: '/canvas'),
-        _buildMenu(
-            icon: Icons.precision_manufacturing,
-            label: 'Rakitan',
-            route: '/rakitan'),
+        if (can(AppPermission.tkdn))
+          _buildMenu(icon: Icons.verified, label: 'TKDN', route: '/tkdn'),
+        if (can(AppPermission.canvas))
+          _buildMenu(icon: Icons.palette, label: 'Canvas', route: '/canvas'),
+        if (can(AppPermission.rakitan))
+          _buildMenu(
+              icon: Icons.precision_manufacturing,
+              label: 'Rakitan',
+              route: '/rakitan'),
       ],
 
-      // --- GROUP 2: Memo, Delivery, Pengiriman, Peta ---
+      // --- GROUP 2: Memo, Delivery, Pengiriman ---
       [
-        if (userRole != 'DELIVERY')
+        if (can(AppPermission.memo))
           _buildMenu(
               icon: Icons.assignment_rounded, label: 'Memo', route: '/memo'),
-        if (userRole != null && userRole!.startsWith('MARKETING'))
+        if (can(AppPermission.servis))
+          _buildMenu(
+              icon: Icons.miscellaneous_services_rounded,
+              label: 'Servis',
+              route: AppRoutes.servis),
+        if (can(AppPermission.requestDelivery))
           _buildMenu(
               icon: Icons.local_shipping_outlined,
               label: 'Request Delivery',
               route: AppRoutes.requestDelivery),
-        if (userRole == null ||
-            (!userRole!.startsWith('MARKETING') &&
-                userRole != 'NOTA' &&
-                userRole != 'TEKNISI'))
+        if (can(AppPermission.pengiriman))
           _buildMenu(
             icon: Icons.local_shipping_rounded,
             label: userRole == 'DELIVERY' ? 'Pengantaran' : 'Pengiriman',
             route: '/pengiriman',
           ),
-        // KOMENTAR: Menu Peta Pengantaran dinonaktifkan sementara
-        // untuk menggunakan pendekatan baru.
-        // if (userRole == 'ADMIN' ||
-        //     userRole == 'GUDANG' ||
-        //     userRole == 'SPV_GUDANG' ||
-        //     userRole == 'DELIVERY')
-        //   _buildMenu(
-        //       icon: Icons.map_rounded,
-        //       label: 'Peta Pengantaran',
-        //       route: AppRoutes.mapPengantaran),
       ],
 
       // --- GROUP 3: Pembelian, Penjualan, Item SN, Data Warehouse ---
       [
-        if (userRole == 'ADMIN' ||
-            userRole == 'SUPERVISOR' ||
-            userRole == 'TEKNISI' ||
-            userRole == 'SPV_MARKETING')
+        if (can(AppPermission.pembelian))
           _buildMenu(
               icon: Icons.shopping_bag,
               label: 'Pembelian',
               route: '/pembelian'),
-        if (userRole == 'ADMIN' ||
-            userRole == 'SUPERVISOR' ||
-            userRole == 'TEKNISI' ||
-            userRole == 'SPV_MARKETING')
+        if (can(AppPermission.penjualan))
           _buildMenu(
               icon: Icons.shopping_cart,
               label: 'Penjualan',
               route: '/penjualan'),
-        _buildMenu(
-            icon: Icons.qr_code_scanner, label: 'Item SN', route: '/item-sn'),
-        if (userRole == 'ADMIN' || userRole == 'SPV_MARKETING')
+        if (can(AppPermission.itemSn))
+          _buildMenu(
+              icon: Icons.qr_code_scanner, label: 'Item SN', route: '/item-sn'),
+        if (can(AppPermission.ijinImport))
           _buildMenu(
               icon: Icons.assignment_turned_in_rounded,
               label: 'Ijin Import',
               route: AppRoutes.ijinImport),
-        if (userRole == 'ADMIN' || userRole == 'SPV_MARKETING')
+        if (can(AppPermission.shbj))
           _buildMenu(
               icon: Icons.construction_rounded,
               label: 'SHBJ',
               route: AppRoutes.shbj),
-        _buildMenu(
-            icon: Icons.warehouse,
-            label: 'Data Warehouse',
-            route: '/data-warehouse'),
+        if (can(AppPermission.dataWarehouse))
+          _buildMenu(
+              icon: Icons.warehouse,
+              label: 'Data Warehouse',
+              route: '/data-warehouse'),
       ],
 
       // --- GROUP 4: Data Canvas, User, Log Aktivitas ---
       [
-        _buildMenu(
-            icon: Icons.dataset, label: 'Data Canvas', route: '/data-canvas'),
-        if (userRole == 'ADMIN') // Asumsi User & Log hanya untuk ADMIN
-          _buildMenu(icon: Icons.people, label: 'User', route: '/user'),
-        if (userRole == 'ADMIN')
+        if (can(AppPermission.dataCanvas))
+          _buildMenu(
+              icon: Icons.dataset, label: 'Data Canvas', route: '/data-canvas'),
+        if (can(AppPermission.users))
+          _buildMenu(icon: Icons.people, label: 'User', route: '/users'),
+        if (can(AppPermission.activityLog))
           _buildMenu(
               icon: Icons.history,
               label: 'Log Aktivitas',
-              route: '/log-aktivitas'),
+              route: '/activity-log'),
       ],
     ];
 

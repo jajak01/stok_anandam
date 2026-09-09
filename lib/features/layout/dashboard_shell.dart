@@ -794,6 +794,32 @@ class _MobileLayout extends StatelessWidget {
                         ),
                       if (userRole == 'ADMIN' ||
                           userRole == 'MANAGER' ||
+                          userRole == 'SUPERVISOR' ||
+                          userRole == 'TEKNISI' ||
+                          userRole == 'SPV_MARKETING')
+                        _buildMenuItem(
+                          context,
+                          icon: Icons.account_balance_wallet_rounded,
+                          label: 'Hutang',
+                          route: AppRoutes.hutang,
+                          currentRoute: currentRoute,
+                          onNavigate: onNavigate,
+                        ),
+                      if (userRole == 'ADMIN' ||
+                          userRole == 'MANAGER' ||
+                          userRole == 'SPV_MARKETING' ||
+                          (userRole != null &&
+                              userRole!.startsWith('MARKETING')))
+                        _buildMenuItem(
+                          context,
+                          icon: Icons.receipt_long_rounded,
+                          label: 'Piutang',
+                          route: AppRoutes.piutang,
+                          currentRoute: currentRoute,
+                          onNavigate: onNavigate,
+                        ),
+                      if (userRole == 'ADMIN' ||
+                          userRole == 'MANAGER' ||
                           userRole == 'SPV_MARKETING' ||
                           userRole == 'TEKNISI')
                         _buildMenuItem(

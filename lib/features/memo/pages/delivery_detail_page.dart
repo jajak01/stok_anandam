@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:stok_anandam/features/shared/widgets/camera_screen.dart';
 import 'package:stok_anandam/core/widgets/action_slider.dart';
+import 'package:stok_anandam/core/services/delivery_location_binder.dart';
 import 'package:stok_anandam/data/models/memo.dart';
 import 'package:stok_anandam/data/models/penjadwalan.dart';
 import 'package:stok_anandam/features/memo/bloc/memo_bloc.dart';
@@ -82,53 +83,60 @@ class _DeliveryDetailPageState extends State<DeliveryDetailPage> {
             final isActiveDelivery = isWaiting ||
                 memo.statusAkhir == MemoStatus.DALAM_PENGIRIMAN;
 
-            return Scaffold(
-              backgroundColor: const Color(0xFFF8FAFC),
-              appBar: AppBar(
-                title: const Text('Detail Pengantaran',
-                    style:
-                        TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                centerTitle: true,
-                elevation: 0,
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
-                actions: [
-                  if (isWaiting)
-                    IconButton(
-                      icon: const Icon(Icons.cancel_outlined, color: Colors.red),
-                      tooltip: 'Lepas Tugas (Batal Ambil)',
-                      onPressed: () => _confirmReleaseTask(context, memo),
-                    ),
-                ],
+            return DeliveryLocationBinder(
+              deliveryId: widget.id,
+              menuCode: 'DELIVERY',
+              active: memo.statusAkhir == MemoStatus.DALAM_PENGIRIMAN,
+              child: Scaffold(
+                backgroundColor: const Color(0xFFF8FAFC),
+                appBar: AppBar(
+                  title: const Text('Detail Pengantaran',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 18)),
+                  centerTitle: true,
+                  elevation: 0,
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
+                  actions: [
+                    if (isWaiting)
+                      IconButton(
+                        icon:
+                            const Icon(Icons.cancel_outlined, color: Colors.red),
+                        tooltip: 'Lepas Tugas (Batal Ambil)',
+                        onPressed: () => _confirmReleaseTask(context, memo),
+                      ),
+                  ],
+                ),
+                body: SingleChildScrollView(
+                  padding: const EdgeInsets.only(bottom: 120),
+                  child: Builder(builder: (context) {
+                    final jadwal = memo.penjadwalanHistory.isNotEmpty
+                        ? memo.penjadwalanHistory.last
+                        : null;
+                    return Column(
+                      children: [
+                        _buildStatusHeader(memo),
+                        _buildCustomerCard(memo),
+                        if (jadwal?.tipeTugas == 'DROP_OFF_EKSPEDISI')
+                          _buildManifestCard(jadwal!),
+                        _buildLogisticsCard(memo),
+                        _buildLocationCard(memo),
+                        _buildItemsCard(memo),
+                        // Scan Resi: tampil saat aktif pengiriman
+                        if (isActiveDelivery)
+                          _buildResiScanCard(context, memo, isInstant),
+                        // Foto paket: tampil setelah resi match ATAU status DALAM_PENGIRIMAN
+                        if (isActiveDelivery &&
+                            (_resiMatched ||
+                                memo.statusAkhir ==
+                                    MemoStatus.DALAM_PENGIRIMAN))
+                          _buildPackagePhotoCard(context, memo, isInstant),
+                      ],
+                    );
+                  }),
+                ),
+                bottomSheet: _buildStickyFooter(context, memo, isInstant),
               ),
-              body: SingleChildScrollView(
-                padding: const EdgeInsets.only(bottom: 120),
-                child: Builder(builder: (context) {
-                  final jadwal = memo.penjadwalanHistory.isNotEmpty
-                      ? memo.penjadwalanHistory.last
-                      : null;
-                  return Column(
-                    children: [
-                      _buildStatusHeader(memo),
-                      _buildCustomerCard(memo),
-                      if (jadwal?.tipeTugas == 'DROP_OFF_EKSPEDISI')
-                        _buildManifestCard(jadwal!),
-                      _buildLogisticsCard(memo),
-                      _buildLocationCard(memo),
-                      _buildItemsCard(memo),
-                      // Scan Resi: tampil saat aktif pengiriman
-                      if (isActiveDelivery)
-                        _buildResiScanCard(context, memo, isInstant),
-                      // Foto paket: tampil setelah resi match ATAU status DALAM_PENGIRIMAN
-                      if (isActiveDelivery &&
-                          (_resiMatched ||
-                              memo.statusAkhir == MemoStatus.DALAM_PENGIRIMAN))
-                        _buildPackagePhotoCard(context, memo, isInstant),
-                    ],
-                  );
-                }),
-              ),
-              bottomSheet: _buildStickyFooter(context, memo, isInstant),
             );
           }
 

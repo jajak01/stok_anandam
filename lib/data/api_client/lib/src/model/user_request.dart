@@ -25,6 +25,8 @@ class UserRequest {
      this.password,
 
     required  this.role,
+
+     this.permissions,
   });
 
   @JsonKey(
@@ -72,6 +74,13 @@ class UserRequest {
 
 
   final UserRequestRoleEnum? role;
+
+  @JsonKey(
+    name: r'permissions',
+    required: false,
+    includeIfNull: false
+  )
+  final List<String>? permissions;
 
 
 
