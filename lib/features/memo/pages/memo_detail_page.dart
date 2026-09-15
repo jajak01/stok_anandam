@@ -1707,10 +1707,10 @@ class MemoDetailPage extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: bgColor.withValues(alpha: activeOpacity * bgColor.opacity),
+            color: bgColor.withValues(alpha: activeOpacity * bgColor.a),
             border: Border.all(
                 color: borderColor.withValues(
-                    alpha: activeOpacity * borderColor.opacity)),
+                    alpha: activeOpacity * borderColor.a)),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(

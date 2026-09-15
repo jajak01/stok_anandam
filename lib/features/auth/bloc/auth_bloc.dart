@@ -197,8 +197,9 @@ Future<void> _performLogin(
 
   static String? _extractMessage(dynamic body) {
     if (body == null) return null;
-    if (body is Map && body['message'] != null)
+    if (body is Map && body['message'] != null) {
       return body['message'].toString();
+    }
     if (body is String) return body.isNotEmpty ? body : null;
     return null;
   }

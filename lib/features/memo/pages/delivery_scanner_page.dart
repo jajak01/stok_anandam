@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'dart:developer' as dev;
 import 'package:flutter_bloc/flutter_bloc.dart';

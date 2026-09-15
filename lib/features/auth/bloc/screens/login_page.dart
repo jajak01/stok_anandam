@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -30,8 +31,6 @@ class _LoginPageState extends State<LoginPage> {
   final _userController = TextEditingController();
   final _passController = TextEditingController();
   bool _obscurePassword = true;
-  /// Pesan server busy yang akan ditampilkan di banner (dari state sebelumnya,
-  /// agar banner tidak menghilang saat widget rebuild).
   String? _serverBusyMessage;
 
   @override
@@ -41,163 +40,198 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  static const double _breakpoint = 700;
+  static const double _breakpoint = 850;
 
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.sizeOf(context).width >= _breakpoint;
-    final padding = MediaQuery.paddingOf(context);
     final theme = Theme.of(context);
+    final primaryColor = theme.colorScheme.primary;
+
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      body: SafeArea(
-        child: BlocConsumer<AuthBloc, AuthState>(
-          // Hanya rebuild saat tipe state berubah (Initial→Loading→Success/Failure)
-          // agar TextField tidak kehilangan focus saat Bloc emit state baru yang sama.
-          buildWhen: (previous, current) =>
-              previous.runtimeType != current.runtimeType,
-          listener: (context, state) {
-            if (state is AuthSuccess) {
-              // Connect WebSocket presence
-              final userId = getIt<CurrentUserStore>().userId?.toString();
-              final name = getIt<CurrentUserStore>().displayName;
-              if (userId != null && userId.isNotEmpty) {
-                getIt<WebSocketService>().connectPresence(
-                  userId: userId,
-                  name: name,
-                );
-              }
+      backgroundColor: const Color(0xFFF4F6FB), // Light crisp canvas
+      body: Stack(
+        children: [
+          // Ambient Background Blobs
+          Positioned(
+            top: -100,
+            left: -80,
+            child: Container(
+              width: 380,
+              height: 380,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: primaryColor.withValues(alpha: 0.22),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -120,
+            right: -60,
+            child: Container(
+              width: 420,
+              height: 420,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.lightBlue.withValues(alpha: 0.18),
+              ),
+            ),
+          ),
+          Positioned(
+            top: MediaQuery.sizeOf(context).height * 0.4,
+            right: -100,
+            child: Container(
+              width: 260,
+              height: 260,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.indigoAccent.withValues(alpha: 0.12),
+              ),
+            ),
+          ),
 
-              // Navigate to the role-appropriate home page.
-              // User data is already loaded by AuthBloc before AuthSuccess is emitted.
-              final userRole =
-                  getIt<CurrentUserStore>().userRole?.toUpperCase();
-              if (userRole == null) {
-                // If role not yet loaded, wait for CurrentUserStore to notify and trigger a rebuild
-                // or the app_router redirect will eventually take over.
-                // For now, we can show a message or just wait.
-                return;
-              }
+          // Gaussian Blur Overlay
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 75, sigmaY: 75),
+              child: Container(
+                color: Colors.white.withValues(alpha: 0.35),
+              ),
+            ),
+          ),
 
-              if (userRole == 'TEKNISI' || userRole == 'DELIVERY') {
-                context.go(AppRoutes.pengiriman);
-              } else if (userRole.contains('NOTA')) {
-                context.go(AppRoutes.memo);
-              } else if (userRole == 'GUDANG' ||
-                  userRole.startsWith('MARKETING')) {
-                context.go(AppRoutes.stok);
-              } else {
-                context.go(AppRoutes.stok);
-              }
-            } else if (state is AuthFailure) {
-              if (state.isDeactivated) {
-                context.go(AppRoutes.accessDenied);
-              } else {
-                AppFeedback.showError(context, state.error);
-              }
-            } else if (state is AuthInitial) {
-              // Reset banner saat kembali ke initial state
-              setState(() => _serverBusyMessage = null);
-            }
-          },
-          builder: (context, state) {
-            // Simpan pesan server busy dari state terakhir
-            if (state is AuthServerBusy) {
-              _serverBusyMessage = state.message;
-            } else if (state is AuthInitial || state is AuthLoading) {
-              // Jangan hapus banner saat loading — biarkan tetap terlihat
-            } else {
-              // AuthSuccess/AuthFailure — banner tidak relevan lagi
-              _serverBusyMessage = null;
-            }
+          // Main Responsive Content Body
+          SafeArea(
+            child: BlocConsumer<AuthBloc, AuthState>(
+              buildWhen: (previous, current) =>
+                  previous.runtimeType != current.runtimeType,
+              listener: (context, state) {
+                if (state is AuthSuccess) {
+                  final userId = getIt<CurrentUserStore>().userId?.toString();
+                  final name = getIt<CurrentUserStore>().displayName;
+                  if (userId != null && userId.isNotEmpty) {
+                    getIt<WebSocketService>().connectPresence(
+                      userId: userId,
+                      name: name,
+                    );
+                  }
 
-            // Widget banner server busy (dipasang di atas form)
-            Widget? serverBanner;
-            if (state is AuthServerBusy || (_serverBusyMessage != null && state is! AuthSuccess && state is! AuthFailure)) {
-              serverBanner = _ServerBusyBanner(
-                message: _serverBusyMessage ?? 'Server sedang sibuk...',
-                isRetrying: state is AuthServerBusy && state.isRetrying,
-              );
-            }
+                  final userRole =
+                      getIt<CurrentUserStore>().userRole?.toUpperCase();
+                  if (userRole == null) return;
 
-            if (isWide) {
-              return Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      children: [
-                        if (serverBanner != null) serverBanner,
-                        Expanded(
-                          child: _FormPanel(
-                            userController: _userController,
-                            passController: _passController,
-                            obscurePassword: _obscurePassword,
-                            onTogglePassword: () =>
-                                setState(() => _obscurePassword = !_obscurePassword),
-                            isLoading: state is AuthLoading,
-                            onSubmit: () {
-                              debugPrint(
-                                  '[LoginPage] Submitting login with username: ${_userController.text}');
-                              context.read<AuthBloc>().add(
-                                    LoginSubmitted(
-                                        _userController.text, _passController.text),
-                                  );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(child: _IllustrationPanel()),
-                ],
-              );
-            }
-            final w = MediaQuery.sizeOf(context).width;
-            final hPad = w < 400 ? 16.0 : 24.0;
-            return SingleChildScrollView(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: MediaQuery.sizeOf(context).height -
-                      padding.top -
-                      padding.bottom,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  if (userRole == 'TEKNISI' || userRole == 'DELIVERY') {
+                    context.go(AppRoutes.pengiriman);
+                  } else if (userRole.contains('NOTA')) {
+                    context.go(AppRoutes.memo);
+                  } else if (userRole == 'GUDANG' ||
+                      userRole.startsWith('MARKETING')) {
+                    context.go(AppRoutes.stok);
+                  } else {
+                    context.go(AppRoutes.stok);
+                  }
+                } else if (state is AuthFailure) {
+                  if (state.isDeactivated) {
+                    context.go(AppRoutes.accessDenied);
+                  } else {
+                    AppFeedback.showError(context, state.error);
+                  }
+                } else if (state is AuthInitial) {
+                  setState(() => _serverBusyMessage = null);
+                }
+              },
+              builder: (context, state) {
+                if (state is AuthServerBusy) {
+                  _serverBusyMessage = state.message;
+                } else if (state is AuthInitial || state is AuthLoading) {
+                  // Keep banner during loading
+                } else {
+                  _serverBusyMessage = null;
+                }
+
+                Widget? serverBanner;
+                if (state is AuthServerBusy ||
+                    (_serverBusyMessage != null &&
+                        state is! AuthSuccess &&
+                        state is! AuthFailure)) {
+                  serverBanner = _ServerBusyBanner(
+                    message: _serverBusyMessage ?? 'Server sedang sibuk...',
+                    isRetrying: state is AuthServerBusy && state.isRetrying,
+                  );
+                }
+
+                return Column(
                   children: [
-                    _MobileHeader(),
                     if (serverBanner != null) serverBanner,
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(hPad, 24, hPad, 32),
-                      child: _FormPanel(
-                        userController: _userController,
-                        passController: _passController,
-                        obscurePassword: _obscurePassword,
-                        onTogglePassword: () => setState(
-                            () => _obscurePassword = !_obscurePassword),
-                        isLoading: state is AuthLoading,
-                        onSubmit: () {
-                          debugPrint(
-                              '[LoginPage] Submitting login with username: ${_userController.text}');
-                          context.read<AuthBloc>().add(
-                                LoginSubmitted(
-                                    _userController.text, _passController.text),
-                              );
-                        },
+                    Expanded(
+                      child: Center(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(24.0),
+                          child: isWide
+                              ? Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    ConstrainedBox(
+                                      constraints:
+                                          const BoxConstraints(maxWidth: 460),
+                                      child: _FormPanel(
+                                        userController: _userController,
+                                        passController: _passController,
+                                        obscurePassword: _obscurePassword,
+                                        onTogglePassword: () => setState(() =>
+                                            _obscurePassword =
+                                                !_obscurePassword),
+                                        isLoading: state is AuthLoading,
+                                        onSubmit: () {
+                                          context.read<AuthBloc>().add(
+                                                LoginSubmitted(
+                                                    _userController.text,
+                                                    _passController.text),
+                                              );
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 32),
+                                    ConstrainedBox(
+                                      constraints:
+                                          const BoxConstraints(maxWidth: 420),
+                                      child: const _IllustrationPanel(),
+                                    ),
+                                  ],
+                                )
+                              : ConstrainedBox(
+                                  constraints:
+                                      const BoxConstraints(maxWidth: 440),
+                                  child: _FormPanel(
+                                    userController: _userController,
+                                    passController: _passController,
+                                    obscurePassword: _obscurePassword,
+                                    onTogglePassword: () => setState(() =>
+                                        _obscurePassword = !_obscurePassword),
+                                    isLoading: state is AuthLoading,
+                                    onSubmit: () {
+                                      context.read<AuthBloc>().add(
+                                            LoginSubmitted(_userController.text,
+                                                _passController.text),
+                                          );
+                                    },
+                                  ),
+                                ),
+                        ),
                       ),
                     ),
                   ],
-                ),
-              ),
-            );
-          },
-        ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-/// Banner informasi ketika server sedang sibuk / gangguan.
-/// Tidak auto-dismiss — tetap terlihat sampai user mencoba lagi dan berhasil.
+/// Glassmorphic Server Busy Banner
 class _ServerBusyBanner extends StatelessWidget {
   final String message;
   final bool isRetrying;
@@ -211,37 +245,35 @@ class _ServerBusyBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       decoration: BoxDecoration(
-        color: Colors.orange.shade50,
-        border: Border.all(color: Colors.orange.shade200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+        color: Colors.amber.shade50.withValues(alpha: 0.8),
+        border: Border(
+          bottom: BorderSide(
+            color: Colors.amber.shade200.withValues(alpha: 0.8),
+            width: 1.5,
           ),
-        ],
+        ),
       ),
       child: Row(
         children: [
           Icon(
             Icons.sync_problem_rounded,
-            color: Colors.orange.shade700,
+            color: Colors.amber.shade900,
             size: 22,
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
+                const Text(
                   'Server Tidak Tersedia',
                   style: TextStyle(
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                     fontSize: 13,
-                    color: Colors.orange.shade900,
+                    color: Color(0xFF451A03),
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -249,7 +281,7 @@ class _ServerBusyBanner extends StatelessWidget {
                   message,
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.orange.shade800,
+                    color: Colors.amber.shade900,
                     height: 1.3,
                   ),
                 ),
@@ -260,12 +292,12 @@ class _ServerBusyBanner extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(left: 8),
               child: SizedBox(
-                width: 16,
-                height: 16,
+                width: 18,
+                height: 18,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
                   valueColor: AlwaysStoppedAnimation<Color>(
-                    Colors.orange.shade700,
+                    Colors.amber.shade900,
                   ),
                 ),
               ),
@@ -298,7 +330,6 @@ class _FormPanel extends StatefulWidget {
 }
 
 class _FormPanelState extends State<_FormPanel> {
-  // FocusNodes yang dikelola di sini agar stabil dan tidak terpengaruh rebuild parent
   final _usernameFocusNode = FocusNode();
   final _passwordFocusNode = FocusNode();
 
@@ -344,7 +375,8 @@ class _FormPanelState extends State<_FormPanel> {
         deviceId = 'device-fallback';
       }
 
-      final hasKeys = await _biometricRepository.isBiometricAvailable(deviceId);
+      final hasKeys =
+          await _biometricRepository.isBiometricAvailable(deviceId);
 
       if (mounted) {
         setState(() {
@@ -370,7 +402,11 @@ class _FormPanelState extends State<_FormPanel> {
         await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('Biometrik Belum Aktif'),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            backgroundColor: Colors.white.withValues(alpha: 0.95),
+            title: const Text('Biometrik Belum Aktif',
+                style: TextStyle(fontWeight: FontWeight.bold)),
             content: const Text(
               'Untuk menggunakan login biometrik, silakan:\n\n'
               '1. Login menggunakan username & password\n'
@@ -381,7 +417,8 @@ class _FormPanelState extends State<_FormPanel> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Mengerti'),
+                child: const Text('Mengerti',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -486,460 +523,350 @@ class _FormPanelState extends State<_FormPanel> {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 32),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    final theme = Theme.of(context);
+    final primaryColor = theme.colorScheme.primary;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.65),
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.85),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 30,
+            spreadRadius: 2,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Logo Badge & Branding Header
+          Row(
             children: [
-              const Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(
-                      text: 'Movva ',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 28,
-                        color: Color.fromARGB(223, 9, 5, 89),
-                      ),
-                    ),
-                    TextSpan(
-                      text: 'by Anandam.id',
-                      style: TextStyle(
-                        fontWeight: FontWeight.normal,
-                        fontSize: 16,
-                        color: Color.fromARGB(255, 53, 205, 15),
-                      ),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: primaryColor.withValues(alpha: 0.15),
+                      blurRadius: 16,
+                      spreadRadius: 1,
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 40),
-              Text(
-                'Login',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey.shade800,
+                child: SvgPicture.asset(
+                  'assets/images/icon-anandam.svg',
+                  width: 34,
+                  height: 34,
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Selamat datang. Masuk ke sistem manajemen stok Anda.',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade600,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 36),
-              Text(
-                'Username',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.grey.shade700,
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: widget.userController,
-                focusNode: _usernameFocusNode,
-                decoration: InputDecoration(
-                  hintText: 'Masukkan username',
-                  filled: true,
-                  fillColor: Colors.grey.shade50,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.grey.shade200),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.grey.shade200),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                        BorderSide(color: Colors.blue.shade400, width: 2),
-                  ),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                ),
-                textInputAction: TextInputAction.next,
-                onSubmitted: (_) => _passwordFocusNode.requestFocus(),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'Password',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.grey.shade700,
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: widget.passController,
-                focusNode: _passwordFocusNode,
-                obscureText: widget.obscurePassword,
-                decoration: InputDecoration(
-                  hintText: 'Masukkan password',
-                  filled: true,
-                  fillColor: Colors.grey.shade50,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.grey.shade200),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.grey.shade200),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                        BorderSide(color: Colors.blue.shade400, width: 2),
-                  ),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      widget.obscurePassword
-                          ? Icons.visibility_rounded
-                          : Icons.visibility_off_rounded,
-                      color: Colors.grey.shade600,
-                      size: 22,
-                    ),
-                    onPressed: widget.onTogglePassword,
-                  ),
-                ),
-                textInputAction: TextInputAction.done,
-                onSubmitted: (_) => widget.onSubmit(),
-              ),
-              const SizedBox(height: 32),
-              Row(
+              const SizedBox(width: 14),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    flex: 4,
-                    child: SizedBox(
-                      height: 52,
-                      child: ElevatedButton(
-                        onPressed: (widget.isLoading || _isLoadingBiometric)
-                            ? null
-                            : widget.onSubmit,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue.shade600,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: widget.isLoading
-                            ? const SizedBox(
-                                height: 24,
-                                width: 24,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text('LOGIN',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.5)),
-                      ),
+                  const Text(
+                    'Movva',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 22,
+                      color: Color(0xFF1A1C24),
+                      letterSpacing: -0.3,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 1,
-                    child: SizedBox(
-                      height: 52,
-                      child: OutlinedButton(
-                        onPressed: (_isLoadingBiometric || widget.isLoading)
-                            ? null
-                            : _handleBiometricLogin,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.blue.shade700,
-                          side: BorderSide(color: Colors.blue.shade300),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          padding: EdgeInsets.zero,
-                        ),
-                        child: _isLoadingBiometric
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.fingerprint, size: 28),
-                      ),
+                  Text(
+                    'by Anandam.id',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                      color: primaryColor,
                     ),
                   ),
                 ],
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
 
-class _IllustrationPanel extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.blue.shade50,
-            Colors.blue.shade100.withValues(alpha: 0.6),
-            Colors.blue.shade200.withValues(alpha: 0.3),
-          ],
-        ),
-      ),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Positioned(
-            top: 80,
-            left: 40,
-            child: _ChartCircle(
-                size: 120, color: Colors.blue.shade200.withValues(alpha: 0.5)),
-          ),
-          Positioned(
-            top: 120,
-            right: 60,
-            child: _ChartCircle(
-                size: 80, color: Colors.blue.shade300.withValues(alpha: 0.4)),
-          ),
-          Positioned(
-            bottom: 120,
-            left: 80,
-            child: _BarStack(),
-          ),
-          Positioned(
-            bottom: 180,
-            right: 100,
-            child: _DashboardCard(),
-          ),
-          Center(
-            child: SvgPicture.asset(
-              'assets/images/anandam-logo.svg',
-              width: 140,
-              height: 140,
+          const SizedBox(height: 32),
+
+          // Title & Description
+          const Text(
+            'Selamat Datang',
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF1A1C24),
+              letterSpacing: -0.5,
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ChartCircle extends StatelessWidget {
-  const _ChartCircle({required this.size, required this.color});
-
-  final double size;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-      ),
-      child: CustomPaint(
-        painter: _PieSlicePainter(),
-        size: Size(size, size),
-      ),
-    );
-  }
-}
-
-class _PieSlicePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.blue.shade400.withValues(alpha: 0.3)
-      ..style = PaintingStyle.fill;
-    canvas.drawArc(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      -0.5,
-      1.8,
-      true,
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _BarStack extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        _Bar(
-            width: 60,
-            height: 24,
-            color: Colors.blue.shade300.withValues(alpha: 0.5)),
-        const SizedBox(height: 6),
-        _Bar(
-            width: 90,
-            height: 24,
-            color: Colors.blue.shade400.withValues(alpha: 0.5)),
-        const SizedBox(height: 6),
-        _Bar(
-            width: 50,
-            height: 24,
-            color: Colors.blue.shade300.withValues(alpha: 0.5)),
-      ],
-    );
-  }
-}
-
-class _Bar extends StatelessWidget {
-  const _Bar({required this.width, required this.height, required this.color});
-
-  final double width;
-  final double height;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(6),
-      ),
-    );
-  }
-}
-
-class _DashboardCard extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 100,
-      height: 70,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blue.shade100),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: List.generate(
-                4,
-                (_) => Container(
-                      width: 8,
-                      height: 8,
-                      margin: const EdgeInsets.only(right: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade300.withValues(alpha: 0.6),
-                        shape: BoxShape.circle,
-                      ),
-                    )),
+          const SizedBox(height: 6),
+          const Text(
+            'Masuk ke sistem manajemen stok Anda.',
+            style: TextStyle(
+              fontSize: 13,
+              color: Color(0xFF5A607F),
+              height: 1.4,
+            ),
           ),
-          _Bar(
-              width: 60,
-              height: 8,
-              color: Colors.blue.shade200.withValues(alpha: 0.6)),
-          _Bar(
-              width: 40,
-              height: 8,
-              color: Colors.blue.shade200.withValues(alpha: 0.4)),
-        ],
-      ),
-    );
-  }
-}
 
-class _MobileHeader extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(24, 48, 24, 32),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.blue.shade600,
-            Colors.blue.shade700,
-          ],
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.4),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: SvgPicture.asset(
-                    'assets/images/icon-anandam.svg',
-                    width: 28,
-                    height: 28,
+          const SizedBox(height: 32),
+
+          // Username Field
+          const Text(
+            'Username',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF334155),
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: widget.userController,
+            focusNode: _usernameFocusNode,
+            style: const TextStyle(fontSize: 14, color: Color(0xFF1E293B)),
+            decoration: InputDecoration(
+              hintText: 'Masukkan username',
+              hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.6),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.8)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.9)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: primaryColor, width: 1.8),
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+            ),
+            textInputAction: TextInputAction.next,
+            onSubmitted: (_) => _passwordFocusNode.requestFocus(),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Password Field
+          const Text(
+            'Password',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF334155),
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: widget.passController,
+            focusNode: _passwordFocusNode,
+            obscureText: widget.obscurePassword,
+            style: const TextStyle(fontSize: 14, color: Color(0xFF1E293B)),
+            decoration: InputDecoration(
+              hintText: 'Masukkan password',
+              hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.6),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.8)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.9)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: primaryColor, width: 1.8),
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+              suffixIcon: IconButton(
+                icon: Icon(
+                  widget.obscurePassword
+                      ? Icons.visibility_rounded
+                      : Icons.visibility_off_rounded,
+                  color: const Color(0xFF64748B),
+                  size: 20,
+                ),
+                onPressed: widget.onTogglePassword,
+              ),
+            ),
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => widget.onSubmit(),
+          ),
+
+          const SizedBox(height: 32),
+
+          // Action Buttons: Login & Biometric
+          Row(
+            children: [
+              Expanded(
+                flex: 4,
+                child: SizedBox(
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: (widget.isLoading || _isLoadingBiometric)
+                        ? null
+                        : widget.onSubmit,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      foregroundColor: Colors.white,
+                      elevation: 4,
+                      shadowColor: primaryColor.withValues(alpha: 0.4),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: widget.isLoading
+                        ? const SizedBox(
+                            height: 22,
+                            width: 22,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text(
+                            'LOGIN',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.8,
+                              fontSize: 14,
+                            ),
+                          ),
                   ),
                 ),
-                const SizedBox(width: 12),
-                const Text(
-                  'Stok Anandam',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 1,
+                child: SizedBox(
+                  height: 52,
+                  child: OutlinedButton(
+                    onPressed: (_isLoadingBiometric || widget.isLoading)
+                        ? null
+                        : _handleBiometricLogin,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: primaryColor,
+                      backgroundColor: Colors.white.withValues(alpha: 0.7),
+                      side: const BorderSide(color: Colors.white, width: 1.5),
+                      elevation: 2,
+                      shadowColor: Colors.black.withValues(alpha: 0.05),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      padding: EdgeInsets.zero,
+                    ),
+                    child: _isLoadingBiometric
+                        ? SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: primaryColor,
+                            ),
+                          )
+                        : Icon(Icons.fingerprint_rounded,
+                            size: 26, color: primaryColor),
                   ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Glassmorphic Decorative Illustration Panel (for Desktop/Tablet wide mode)
+class _IllustrationPanel extends StatelessWidget {
+  const _IllustrationPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primaryColor = theme.colorScheme.primary;
+
+    return Container(
+      height: 480,
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.7),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 24,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Background Rings
+          Container(
+            width: 220,
+            height: 220,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: primaryColor.withValues(alpha: 0.08),
+              border: Border.all(
+                color: primaryColor.withValues(alpha: 0.15),
+                width: 1.5,
+              ),
+            ),
+          ),
+          Container(
+            width: 150,
+            height: 150,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: primaryColor.withValues(alpha: 0.12),
+            ),
+          ),
+
+          // Central Glass SVG Logo
+          // Change Container shape to RoundedRectangle
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
+            decoration: BoxDecoration(
+              color: const Color.fromARGB(255, 108, 153, 221).withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(24), // Box instead of Circle
+              boxShadow: [
+                BoxShadow(
+                  color: primaryColor.withValues(alpha: 0.15),
+                  blurRadius: 20,
+                  spreadRadius: 2,
                 ),
               ],
             ),
-            const SizedBox(height: 24),
-            const Text(
-              'Login',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
+            child: SvgPicture.asset(
+              'assets/images/anandam-logo.svg',
+              width: 180, // Allow horizontal space for the full logo
             ),
-            const SizedBox(height: 4),
-            Text(
-              'Masuk ke sistem manajemen stok',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.9),
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
+          )
+        ],
       ),
     );
   }

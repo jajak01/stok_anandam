@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stok_anandam/data/api_new_endpoints.dart';
 import 'package:stok_anandam/features/stock/stok_badan_models.dart';
 
 void main() {

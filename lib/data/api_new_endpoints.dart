@@ -106,8 +106,9 @@ class ApiNewEndpoints {
       final list = data['data'] as List;
       return list
           .map((e) {
-            if (e is Map)
+            if (e is Map) {
               return CanvasingOption.fromJson(Map<String, dynamic>.from(e));
+            }
             return null;
           })
           .whereType<CanvasingOption>()

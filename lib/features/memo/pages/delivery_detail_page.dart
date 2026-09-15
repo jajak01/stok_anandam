@@ -1518,7 +1518,7 @@ class _DeliveryDetailPageState extends State<DeliveryDetailPage> {
             SnackBar(
               content: Text('Gagal menyimpan foto: $e'),
               backgroundColor: Colors.red,
-              duration: Duration(seconds: 3),
+              duration: const Duration(seconds: 3),
             ),
           );
         }
@@ -1606,7 +1606,7 @@ class _DeliveryDetailPageState extends State<DeliveryDetailPage> {
                             children: [
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(16),
-                                child: Image.file(File(localPhoto!.path),
+                                child: Image.file(File(localPhoto.path),
                                     width: double.infinity,
                                     height: 180,
                                     fit: BoxFit.cover),

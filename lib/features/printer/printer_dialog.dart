@@ -349,7 +349,7 @@ class _PrinterDialogState extends State<PrinterDialog> {
           )
         else
           DropdownButtonFormField<String>(
-            value: _selectedPrinter,
+            initialValue: _selectedPrinter,
             isExpanded: true,
             decoration: InputDecoration(
               border:

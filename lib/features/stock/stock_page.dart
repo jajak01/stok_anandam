@@ -565,8 +565,10 @@ class _StockContentState extends State<_StockContent> with MigrationSyncMixin {
 
   void _showDetailSheet(Stock s,
       {required StockRow row, Map<String, int>? stokPerBadan}) {
-    final userRole = getIt<CurrentUserStore>().userRole;
-    final isMarketing = userRole?.startsWith('MARKETING') == true;
+    final userRole = getIt<CurrentUserStore>().userRole?.toUpperCase();
+    final canSeeModal = userRole == 'ADMIN' ||
+        userRole == 'MANAGER' ||
+        (userRole != null && userRole.contains('SPV'));
     final modal = row.modal;
     final finalPricelist = row.finalPricelist;
     final spesifikasi = row.spesifikasi;
@@ -585,330 +587,327 @@ class _StockContentState extends State<_StockContent> with MigrationSyncMixin {
       return '$day/$month/$year $hour:$minute';
     }
 
-    showModalBottomSheet<void>(
+    showDialog<void>(
       context: context,
-      isScrollControlled: true,
-      enableDrag: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => DraggableScrollableSheet(
-        expand: true,
-        initialChildSize: 0.7,
-        minChildSize: 0.4,
-        maxChildSize: 1.0,
-        builder: (context, scrollController) => Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-            boxShadow: [
-              BoxShadow(
-                  color: Colors.black12, blurRadius: 20, offset: Offset(0, -4)),
-            ],
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        clipBehavior: Clip.antiAlias,
+        child: Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+            maxWidth: 600,
           ),
+          color: Colors.white,
           child: SingleChildScrollView(
-            controller: scrollController,
             physics: const BouncingScrollPhysics(),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  const SizedBox(height: 12),
-                  Center(
-                    child: Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                            color: Colors.grey.shade300,
-                            borderRadius: BorderRadius.circular(2))),
+                  // Pop-up Header Action (Close Button)
+                  Align(
+                    alignment: Alignment.topRight,
+                    child: IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Text.rich(
-                                TextSpan(
-                                  children: [
-                                    TextSpan(
-                                      text:
-                                          "${_str(s.itemName) ?? _str(s.itemCode) ?? '—'}\n",
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleMedium
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.bold,
-                                            color: const Color(0xFF1F2937),
-                                            height: 1.3,
-                                          ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(
+                                text:
+                                    "${_str(s.itemName) ?? _str(s.itemCode) ?? '—'}\n",
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFF1F2937),
+                                      height: 1.3,
                                     ),
-                                    if (spesifikasi != null &&
-                                        spesifikasi.isNotEmpty)
-                                      TextSpan(
-                                        text: spesifikasi,
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.normal,
-                                          color: Colors.grey.shade600,
-                                        ),
-                                      ),
-                                  ],
+                              ),
+                              if (spesifikasi != null &&
+                                  spesifikasi.isNotEmpty)
+                                TextSpan(
+                                  text: spesifikasi,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.normal,
+                                    color: Colors.grey.shade600,
+                                  ),
                                 ),
-                                maxLines: 5,
-                                overflow: TextOverflow.ellipsis,
+                            ],
+                          ),
+                          maxLines: 5,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.content_copy_rounded, size: 18),
+                        onPressed: () {
+                          final String nameText =
+                              _str(s.itemName) ?? _str(s.itemCode) ?? '';
+                          final String specText = (spesifikasi != null &&
+                                  spesifikasi.isNotEmpty)
+                              ? spesifikasi
+                              : '';
+                          final String fullText =
+                              "$nameText\n$specText".trim();
+                          if (fullText.isNotEmpty && nameText != '—') {
+                            Clipboard.setData(
+                                ClipboardData(text: fullText));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content: Text(
+                                        'Nama & Spesifikasi disalin'),
+                                    duration: Duration(seconds: 1),
+                                    behavior: SnackBarBehavior.floating));
+                          }
+                        },
+                        color: Colors.blue.shade600,
+                        tooltip: 'Salin Nama & Spesifikasi',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  if (row.warehouses.isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4, bottom: 4),
+                      child: Text(
+                        'Rincian Gudang:',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
+                    ...row.warehouses.map((w) => Padding(
+                          padding: const EdgeInsets.only(left: 12, bottom: 2),
+                          child: Row(children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: _badgeColor(w.warehouse)
+                                    .withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                w.warehouse,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: _badgeColor(w.warehouse),
+                                ),
                               ),
                             ),
                             const SizedBox(width: 8),
-                            IconButton(
-                              icon: const Icon(Icons.content_copy_rounded,
-                                  size: 18),
-                              onPressed: () {
-                                final String nameText =
-                                    _str(s.itemName) ?? _str(s.itemCode) ?? '';
-                                final String specText = (spesifikasi != null &&
-                                        spesifikasi.isNotEmpty)
-                                    ? spesifikasi
-                                    : '';
-                                final String fullText =
-                                    "$nameText\n$specText".trim();
-                                if (fullText.isNotEmpty && nameText != '—') {
-                                  Clipboard.setData(
-                                      ClipboardData(text: fullText));
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                          content: Text(
-                                              'Nama & Spesifikasi disalin'),
-                                          duration: Duration(seconds: 1),
-                                          behavior: SnackBarBehavior.floating));
-                                }
-                              },
-                              color: Colors.blue.shade600,
-                              tooltip: 'Salin Nama & Spesifikasi',
+                            Text(
+                              'Stok: ${w.stok}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1F2937),
+                              ),
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        DetailRowWithCopy(
-                            label: 'Master',
-                            value: _str(s.itemName),
-                            labelWidth: 120),
-                        const Divider(),
-                        if (row.hargaButtom != null) ...[
-                          DetailRowWithCopy(
-                              label: 'Harga Bottom',
-                              value: _formatRupiah(row.hargaButtom),
-                              labelWidth: 120),
-                          const Divider(),
-                        ],
-                        if (!isMarketing) ...[
-                          DetailRowWithCopy(
-                              label: 'Modal Awal',
-                              value: _formatRupiah(s.hargaHpp),
-                              labelWidth: 120),
-                          const Divider(),
-                        ],
-                        DetailRowWithCopy(
-                            label: 'Modal Final',
-                            value: _formatRupiah(modal ?? s.hargaHpp),
-                            labelWidth: 120),
-                        const Divider(),
-                        DetailRowWithCopy(
-                            label: 'Pricelist',
-                            value: _formatRupiah(finalPricelist ?? s.finalPricelist),
-                            labelWidth: 120),
-                        const Divider(),
-                        if (row.lastPurchaseDate != null)
-                          DetailRowWithCopy(
-                            label: 'Tanggal Pembelian Terakhir',
-                            value: (DateTime.tryParse(row.lastPurchaseDate!) !=
-                                    null)
-                                ? formatDate(
-                                    DateTime.parse(row.lastPurchaseDate!))
-                                : row.lastPurchaseDate!,
-                            labelWidth: 120,
-                          ),
-                        const Divider(),
-                        if (row.parName != null)
-                          DetailRowWithCopy(
-                              label: 'Partner',
-                              value: _str(row.parName),
-                              labelWidth: 120),
-                        const Divider(),
-                        DetailRowWithCopy(
-                            label: 'Jenis Pajak',
-                            value: row.isPpn == null
-                                ? '???'
-                                : (row.isPpn! ? 'PPN' : 'NON PPN'),
-                            labelWidth: 120),
-                        const Divider(),
-                        DetailRowWithCopy(
-                            label: 'Total Stok',
-                            value: _str(row.totalStok ?? s.finalStok),
-                            labelWidth: 120),
-                        if (row.totalPending != null &&
-                            row.totalPending! > 0) ...[
-                          const Divider(),
-                          DetailRowWithCopy(
-                              label: 'Total Booking',
-                              value: _str(row.totalPending),
-                              labelWidth: 120),
-                          DetailRowWithCopy(
-                              label: 'Nilai Booking',
-                              value: _formatRupiah(_n(row.totalPending) *
-                                  _n(modal ?? s.hargaHpp)),
-                              labelWidth: 120),
-                          if (row.pendingDetails.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Padding(
-                              padding:
-                                  const EdgeInsets.only(left: 4, bottom: 4),
-                              child: Text('Rincian Booking:',
+                          ]),
+                        )),
+                    const SizedBox(height: 8),
+                    const Divider(),
+                  ] else ...[
+                    DetailRowWithCopy(
+                      label: 'Gudang',
+                      value: _str(s.warehouse),
+                      labelWidth: 120,
+                    ),
+                    const Divider(),
+                  ],
+                  
+                  DetailRowWithCopy(
+                      label: 'Master',
+                      value: _str(s.itemName),
+                      labelWidth: 120),
+                  const Divider(),
+                  if (canSeeModal) ...[
+                    DetailRowWithCopy(
+                        label: 'Modal Hpp',
+                        value: _formatRupiah(s.hargaHpp),
+                        labelWidth: 120),
+                    const Divider(),
+                    DetailRowWithCopy(
+                        label: 'Modal Final',
+                        value: _formatRupiah(modal ?? s.hargaHpp),
+                        labelWidth: 120),
+                    const Divider(),
+                  ],
+                  if (row.hargaButtom != null) ...[
+                    DetailRowWithCopy(
+                        label: 'Harga Bottom',
+                        value: _formatRupiah(row.hargaButtom),
+                        labelWidth: 120),
+                    const Divider(),
+                  ],
+
+                    DetailRowWithCopy(
+                      label: 'Pricelist',
+                      value: _formatRupiah(finalPricelist ?? s.finalPricelist),
+                      labelWidth: 120),
+                  const Divider(),
+                  if (row.lastPurchaseDate != null)
+                    DetailRowWithCopy(
+                      label: 'Pembelian Terakhir',
+                      value: (DateTime.tryParse(row.lastPurchaseDate!) !=
+                              null)
+                          ? formatDate(
+                              DateTime.parse(row.lastPurchaseDate!))
+                          : row.lastPurchaseDate!,
+                      labelWidth: 120,
+                    ),
+                  const Divider(),
+                  if (row.parName != null)
+                    DetailRowWithCopy(
+                        label: 'Partner',
+                        value: _str(row.parName),
+                        labelWidth: 120),
+                  const Divider(),
+                    DetailRowWithCopy(
+                      label: 'Jenis Pajak',
+                      value: row.isPpn == null
+                          ? '???'
+                          : (row.isPpn! ? 'PPN' : 'NON PPN'),
+                      labelWidth: 120),
+                  const Divider(),
+                    DetailRowWithCopy(
+                      label: 'Total Stok',
+                      value: _str(row.totalStok ?? s.finalStok),
+                      labelWidth: 120),
+                  if (row.totalPending != null &&
+                      row.totalPending! > 0) ...[
+                    const Divider(),
+                    DetailRowWithCopy(
+                        label: 'Total Booking',
+                        value: _str(row.totalPending),
+                        labelWidth: 120),
+                    if (canSeeModal)
+                      DetailRowWithCopy(
+                          label: 'Nilai Booking',
+                          value: _formatRupiah(_n(row.totalPending) *
+                              _n(modal ?? s.hargaHpp)),
+                          labelWidth: 120),
+                    if (row.pendingDetails.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding:
+                            const EdgeInsets.only(left: 4, bottom: 4),
+                        child: Text('Rincian Booking:',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue.shade700)),
+                      ),
+                      ...row.pendingDetails.map((p) => Padding(
+                            padding: const EdgeInsets.only(
+                                left: 12, bottom: 2),
+                            child: Row(children: [
+                              Text('${p.marketingNama}: ',
+                                  style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF374151))),
+                              Text('${p.qty}',
                                   style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.blue.shade700)),
+                                      color: Colors.blue.shade800)),
+                            ]),
+                          ))
+                    ],
+                  ],
+                  if (stokPerBadan != null &&
+                      stokPerBadan.entries.any((e) => e.value > 0)) ...[
+                    const SizedBox(height: 10),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4, bottom: 6),
+                      child: Row(
+                        children: [
+                          Icon(Icons.apartment_rounded,
+                              size: 15, color: Colors.blue.shade700),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Stok per Badan Usaha:',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey.shade700,
                             ),
-                            ...row.pendingDetails.map((p) => Padding(
-                                  padding: const EdgeInsets.only(
-                                      left: 12, bottom: 2),
-                                  child: Row(children: [
-                                    Text('${p.marketingNama}: ',
-                                        style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Color(0xFF374151))),
-                                    Text('${p.qty}',
-                                        style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.blue.shade800)),
-                                  ]),
-                                ))
-                          ],
+                          ),
                         ],
-                        if (stokPerBadan != null &&
-                            stokPerBadan.entries.any((e) => e.value > 0)) ...[
-                          const SizedBox(height: 10),
-                          Padding(
-                            padding: const EdgeInsets.only(left: 4, bottom: 6),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 6, bottom: 8),
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: stokPerBadan.entries
+                            .where((e) => e.value > 0)
+                            .map((e) {
+                          final color = _badgeColor(e.key);
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: color.withValues(alpha: 0.3),
+                                width: 1,
+                              ),
+                            ),
                             child: Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.apartment_rounded,
-                                    size: 15, color: Colors.blue.shade700),
-                                const SizedBox(width: 6),
                                 Text(
-                                  'Stok per Badan Usaha:',
+                                  e.key,
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.grey.shade700,
+                                    color: color,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  width: 1,
+                                  height: 12,
+                                  color: color.withValues(alpha: 0.3),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '${e.value} unit',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1E293B),
                                   ),
                                 ),
                               ],
                             ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.only(left: 6, bottom: 8),
-                            child: Wrap(
-                              spacing: 8,
-                              runSpacing: 6,
-                              children: stokPerBadan.entries
-                                  .where((e) => e.value > 0)
-                                  .map((e) {
-                                final color = _badgeColor(e.key);
-                                return Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 5),
-                                  decoration: BoxDecoration(
-                                    color: color.withValues(alpha: 0.08),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: color.withValues(alpha: 0.3),
-                                      width: 1,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        e.key,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                          color: color,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Container(
-                                        width: 1,
-                                        height: 12,
-                                        color: color.withValues(alpha: 0.3),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        '${e.value} unit',
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFF1E293B),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                        ],
-                        if (row.warehouses.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Padding(
-                            padding: const EdgeInsets.only(left: 4, bottom: 4),
-                            child: Text('Rincian Gudang:',
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.grey.shade600)),
-                          ),
-                          ...row.warehouses.map((w) => Padding(
-                                padding:
-                                    const EdgeInsets.only(left: 12, bottom: 2),
-                                child: Row(children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 1),
-                                    decoration: BoxDecoration(
-                                      color: _badgeColor(w.warehouse)
-                                          .withValues(alpha: 0.15),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(w.warehouse,
-                                        style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                            color:
-                                                _badgeColor(w.warehouse))),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text('Stok: ${w.stok}',
-                                      style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFF1F2937))),
-                                ]),
-                              )),
-                          const SizedBox(height: 12),
-                        ] else
-                          DetailRowWithCopy(
-                              label: 'Gudang',
-                              value: _str(s.warehouse),
-                              labelWidth: 120),
-                      ],
+                          );
+                        }).toList(),
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -983,14 +982,9 @@ class _StockContentState extends State<_StockContent> with MigrationSyncMixin {
   }
 
   static String _formatNumber(num value) {
-    if (value % 1 != 0) {
-      final parts = value.toString().split('.');
-      final integerPart = _addThousandSeparator(parts[0]);
-      return '$integerPart,${parts[1]}';
-    } else {
-      return _addThousandSeparator(value.toInt().toString());
+      // Membulatkan (atau gunakan value.toInt() jika ingin membuang desimal tanpa pembulatan)
+      return _addThousandSeparator(value.round().toString());
     }
-  }
 
   static String _addThousandSeparator(String number) {
     final reversed = number.split('').reversed.join();
@@ -1271,7 +1265,10 @@ class _FiltersSectionState extends State<_FiltersSection> {
                     Text("Stok: ${item.totalStok ?? 0}",
                         style: const TextStyle(
                             color: Colors.green, fontWeight: FontWeight.bold)),
-                    if (item.modal != null)
+                    if ((getIt<CurrentUserStore>().userRole?.toUpperCase() == 'ADMIN' ||
+                            getIt<CurrentUserStore>().userRole?.toUpperCase() == 'MANAGER' ||
+                            (getIt<CurrentUserStore>().userRole?.toUpperCase().contains('SPV') == true)) &&
+                        item.modal != null)
                       Text("Rp ${item.modal}",
                           style: const TextStyle(
                               fontSize: 11, color: Colors.grey)),
@@ -1469,13 +1466,9 @@ class _StockDeckView extends StatelessWidget {
   }
 
   static String _formatNumber(num value) {
-    if (value % 1 != 0) {
-      final parts = value.toString().split('.');
-      final integerPart = _addThousandSeparator(parts[0]);
-      return '$integerPart,${parts[1]}';
+      // Membulatkan (atau gunakan value.toInt() jika ingin membuang desimal tanpa pembulatan)
+      return _addThousandSeparator(value.round().toString());
     }
-    return _addThousandSeparator(value.toInt().toString());
-  }
 
   static String _addThousandSeparator(String number) {
     final reversed = number.split('').reversed.join();
@@ -1503,7 +1496,7 @@ static Widget _buildChip(String text, Color textColor, Color bgColor) {
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: textColor.withOpacity(0.3)),
+        border: Border.all(color: textColor.withValues(alpha: 0.3)),
       ),
       child: Text(text,
           style: TextStyle(
@@ -1515,11 +1508,11 @@ static Widget _buildChip(String text, Color textColor, Color bgColor) {
 
   static Color _badgeColor(String badan) {
     switch (badan) {
-      case 'ANC': return Colors.blue;
-      case 'PDB': return Colors.green;
+      case 'ANC': return const Color.fromARGB(255, 6, 145, 1);
+      case 'PDB': return const Color.fromARGB(255, 216, 108, 108);
       case 'MGC': return Colors.orange;
-      case 'GBH': return Colors.purple;
-      case 'SSS': return Colors.teal;
+      case 'GBH': return const Color.fromARGB(255, 38, 221, 68);
+      case 'SSS': return const Color.fromARGB(255, 240, 255, 31);
       case 'SGI': return Colors.red;
       default: return Colors.grey;
     }
@@ -1638,7 +1631,6 @@ static Widget _buildChip(String text, Color textColor, Color bgColor) {
       itemBuilder: (context, i) {
         final row = items[i];
         final s = row.stock;
-        final modalStr = _rp(row.modal ?? s.hargaHpp);
         final pricelistStr = _rp(row.finalPricelist ?? s.finalPricelist);
         return DataDeckCard(
           title: _v(s.itemName),
@@ -1647,9 +1639,7 @@ static Widget _buildChip(String text, Color textColor, Color bgColor) {
           extraContent: _buildBookingBanner(row),
           rows: [
             (label: 'Stok', value: _v(row.totalStok ?? s.finalStok)),
-            if (row.hargaButtom != null)
-              (label: 'Harga Bottom', value: _rp(row.hargaButtom)),
-            (label: 'Modal', value: modalStr),
+            (label: 'Harga Bottom', value: _rp(row.hargaButtom)),
             (label: 'Pricelist', value: pricelistStr)
           ],
           onTap: () => onTap(row),

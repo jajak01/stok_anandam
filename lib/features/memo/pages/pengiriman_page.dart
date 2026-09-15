@@ -1880,8 +1880,9 @@ class _PengirimanPageState extends State<PengirimanPage>
           if (_selectedEkspedisi == 'ANDI') {
             if (!eks.contains('ANDI')) return false;
           } else if (_selectedEkspedisi == 'REGULER') {
-            if (!eks.contains('REGULER') && !eks.contains('REGULAR'))
+            if (!eks.contains('REGULER') && !eks.contains('REGULAR')) {
               return false;
+            }
           } else if (_selectedEkspedisi == 'INSTANT') {
             if (!eks.contains('INSTAN')) return false;
           }

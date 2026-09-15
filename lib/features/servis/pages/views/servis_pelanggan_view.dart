@@ -27,7 +27,7 @@ class _ServisPelangganViewState extends State<ServisPelangganView> {
   String? _errorMessage;
   // Pagination state
   int _currentPage = 0;
-  int _size = 50;
+  final int _size = 50;
   int _totalElements = 0;
   int _totalPages = 0;
   String _searchQuery = '';

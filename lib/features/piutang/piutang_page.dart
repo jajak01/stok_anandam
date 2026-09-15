@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:stok_anandam/core/auth/current_user_store.dart';
@@ -9,9 +11,13 @@ import 'package:stok_anandam/core/routing/app_router.dart';
 import 'package:stok_anandam/data/api_new_endpoints.dart';
 import 'package:stok_anandam/features/layout/dashboard_shell.dart';
 import 'package:stok_anandam/features/shared/custom_pluto_grid.dart';
+import 'package:stok_anandam/features/shared/detail_row_with_copy.dart';
 import 'package:stok_anandam/features/shared/grid_helpers.dart';
 import 'package:stok_anandam/features/shared/item_deck_card.dart';
+import 'package:stok_anandam/features/shared/modern_filter.dart';
+import 'package:stok_anandam/features/shared/responsive_deck_grid.dart';
 import 'package:stok_anandam/features/shared/responsive_padding.dart';
+import 'package:stok_anandam/features/shared/responsive_table.dart';
 import 'package:stok_anandam/injection.dart';
 import 'package:stok_anandam/token_storage.dart';
 
@@ -20,6 +26,7 @@ class _PiutangFilterState {
   _PiutangFilterState._();
   static String tab = 'UNPAID';
   static int page = 0;
+  static int size = 50;
   static String search = '';
   static String searchColumn = 'ALL';
   static DateTime? startDate;
@@ -30,6 +37,7 @@ class _PiutangFilterState {
   static void reset() {
     tab = 'UNPAID';
     page = 0;
+    size = 50;
     search = '';
     searchColumn = 'ALL';
     startDate = null;
@@ -70,7 +78,7 @@ class _PiutangContentState extends State<_PiutangContent> {
   List<PiutangItem> _items = [];
   String _tab = _PiutangFilterState.tab;
   int _page = _PiutangFilterState.page;
-  static const int _size = 50;
+  int _size = _PiutangFilterState.size;
   int _totalPages = 0;
   int _totalElements = 0;
   Object? _totalGrandSum;
@@ -84,7 +92,11 @@ class _PiutangContentState extends State<_PiutangContent> {
 
   List<String> _availableEmpCodes = [];
   List<String> _availableCategories = [];
-  final _searchController = TextEditingController(text: _PiutangFilterState.search);
+  final _searchController =
+      TextEditingController(text: _PiutangFilterState.search);
+  final _searchFocus = FocusNode();
+  Timer? _searchDebounce;
+  static const _searchDebounceDuration = Duration(milliseconds: 450);
 
   bool get _isAdminOrManager {
     final role = getIt<CurrentUserStore>().userRole?.toUpperCase();
@@ -96,11 +108,28 @@ class _PiutangContentState extends State<_PiutangContent> {
     super.initState();
     _loadOptions();
     _load();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  void _onSearchChanged() {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(_searchDebounceDuration, () {
+      if (!mounted) return;
+      setState(() {
+        _search = _searchController.text;
+        _page = 0;
+        _persistFilterState();
+      });
+      _load();
+    });
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -122,6 +151,7 @@ class _PiutangContentState extends State<_PiutangContent> {
   void _persistFilterState() {
     _PiutangFilterState.tab = _tab;
     _PiutangFilterState.page = _page;
+    _PiutangFilterState.size = _size;
     _PiutangFilterState.search = _search;
     _PiutangFilterState.searchColumn = _searchColumn;
     _PiutangFilterState.startDate = _startDate;
@@ -155,12 +185,14 @@ class _PiutangContentState extends State<_PiutangContent> {
         _totalElements = result.totalElements;
         _totalGrandSum = result.totalGrandSum;
         _loading = false;
+        _persistFilterState();
       });
     } on DioException catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'Gagal memuat piutang (${e.response?.statusCode ?? 'network'})';
+        _error =
+            'Gagal memuat piutang (${e.response?.statusCode ?? 'network'})';
       });
     } catch (e) {
       if (!mounted) return;
@@ -169,11 +201,6 @@ class _PiutangContentState extends State<_PiutangContent> {
         _error = e.toString();
       });
     }
-  }
-
-  Future<void> _reload() async {
-    _page = 0;
-    await _load();
   }
 
   void _setTab(String tab) {
@@ -211,83 +238,24 @@ class _PiutangContentState extends State<_PiutangContent> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Export gagal: $e'),
-            backgroundColor: Colors.red));
+            content: Text('Export gagal: $e'), backgroundColor: Colors.red));
       }
     }
   }
 
-  Future<void> _pickDateRange() async {
-    final now = DateTime.now();
-    final range = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2000),
-      lastDate: now,
-      initialDateRange: (_startDate != null && _endDate != null)
-          ? DateTimeRange(start: _startDate!, end: _endDate!)
-          : null,
-    );
-    if (range != null) {
-      setState(() {
-        _startDate = range.start;
-        _endDate = range.end;
-        _page = 0;
-      });
+  void _onSearchSubmitted() {
+    _search = _searchController.text;
+    setState(() {
+      _page = 0;
       _persistFilterState();
-      _load();
-    }
-  }
-
-  Future<void> _pickEmpCodes() async {
-    if (_availableEmpCodes.isEmpty) return;
-    final selected = await showDialog<List<String>>(
-      context: context,
-      builder: (ctx) => _MultiSelectDialog<String>(
-        title: 'Kode Karyawan',
-        options: _availableEmpCodes,
-        selected: _empCodes,
-      ),
-    );
-    if (selected != null) {
-      setState(() {
-        _empCodes = selected;
-        _page = 0;
-      });
-      _persistFilterState();
-      _load();
-    }
-  }
-
-  Future<void> _pickCategories() async {
-    if (_availableCategories.isEmpty) return;
-    final selected = await showDialog<List<String>>(
-      context: context,
-      builder: (ctx) => _MultiSelectDialog<String>(
-        title: 'Kategori (Dept)',
-        options: _availableCategories,
-        selected: _categories,
-      ),
-    );
-    if (selected != null) {
-      setState(() {
-        _categories = selected;
-        _page = 0;
-      });
-      _persistFilterState();
-      _load();
-    }
+    });
+    _load();
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final width = MediaQuery.sizeOf(context).width;
     final isMobile = width < 720;
-    final activeFilters = <String>[];
-    if (_startDate != null || _endDate != null) activeFilters.add('Tanggal');
-    if (_empCodes.isNotEmpty) activeFilters.add('Karyawan');
-    if (_categories.isNotEmpty) activeFilters.add('Kategori');
-    if (_search.trim().isNotEmpty) activeFilters.add('Pencarian');
 
     return DashboardShell(
       currentRoute: AppRoutes.piutang,
@@ -297,9 +265,10 @@ class _PiutangContentState extends State<_PiutangContent> {
       headerActionIcon: _isAdminOrManager
           ? Icons.file_download_rounded
           : Icons.refresh_rounded,
-      onHeaderAction: _isAdminOrManager ? _export : _reload,
+      onHeaderAction: _isAdminOrManager ? _export : _load,
+      showHeaderActionInAppBar: true,
       onScan: () => context.pushNamed(AppRoutes.scanner),
-      onRefresh: _loading ? null : _reload,
+      onRefresh: _loading ? null : _load,
       onNavigate: (route) {
         if (route != AppRoutes.piutang) context.go(route);
       },
@@ -316,182 +285,150 @@ class _PiutangContentState extends State<_PiutangContent> {
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    'Piutang',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                  child: SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(
+                        value: 'UNPAID',
+                        label: Text('UNPAID'),
+                        icon: Icon(Icons.pending_actions_rounded, size: 16),
+                      ),
+                      ButtonSegment(
+                        value: 'PAID',
+                        label: Text('PAID'),
+                        icon: Icon(Icons.task_alt_rounded, size: 16),
+                      ),
+                    ],
+                    selected: {_tab},
+                    onSelectionChanged: (s) => _setTab(s.first),
                   ),
-                ),
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(
-                      value: 'UNPAID',
-                      label: Text('UNPAID'),
-                      icon: Icon(Icons.pending_actions_rounded, size: 16),
-                    ),
-                    ButtonSegment(
-                      value: 'PAID',
-                      label: Text('PAID'),
-                      icon: Icon(Icons.task_alt_rounded, size: 16),
-                    ),
-                  ],
-                  selected: {_tab},
-                  onSelectionChanged: (s) => _setTab(s.first),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            // ── Filter bar ────────────────────────────────────────────
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                _buildFilterAction(
-                  icon: Icons.date_range_rounded,
-                  label: (_startDate != null && _endDate != null)
-                      ? '${_fmt(_startDate)} s/d ${_fmt(_endDate)}'
-                      : 'Tanggal',
-                  active: _startDate != null || _endDate != null,
-                  onTap: _pickDateRange,
-                ),
-                _buildFilterAction(
-                  icon: Icons.badge_rounded,
-                  label: _empCodes.isEmpty
-                      ? 'Kode Karyawan'
-                      : '${_empCodes.length} karyawan',
-                  active: _empCodes.isNotEmpty,
-                  onTap: _pickEmpCodes,
-                ),
-                _buildFilterAction(
-                  icon: Icons.category_rounded,
-                  label: _categories.isEmpty
-                      ? 'Kategori'
-                      : '${_categories.length} kategori',
-                  active: _categories.isNotEmpty,
-                  onTap: _pickCategories,
-                ),
-                if (isMobile)
-                  SizedBox(
-                    width: double.infinity,
-                    child: _buildSearchField(theme),
-                  )
-                else
-                  SizedBox(
-                    width: 260,
-                    child: _buildSearchField(theme),
-                  ),
-                if (activeFilters.isNotEmpty)
-                  IconButton(
-                    tooltip: 'Reset filter',
-                    onPressed: () {
-                      setState(() {
-                        _startDate = null;
-                        _endDate = null;
-                        _empCodes = [];
-                        _categories = [];
-                        _search = '';
-                        _searchController.clear();
-                        _page = 0;
-                      });
-                      _persistFilterState();
-                      _load();
-                    },
-                    icon: const Icon(Icons.filter_alt_off_rounded),
-                  ),
-              ],
-            ),
-            if (!isMobile && activeFilters.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 6,
-                children: [
-                  for (final f in activeFilters)
-                    Chip(
-                      label: Text(f),
-                      visualDensity: VisualDensity.compact,
-                      deleteIcon: const Icon(Icons.close, size: 14),
-                      onDeleted: () {},
-                    ),
-                ],
-              ),
-            ],
             const SizedBox(height: 12),
             Expanded(
-              child: RefreshIndicator(
-                onRefresh: _reload,
-                child: SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (!_loading && _totalGrandSum != null && _items.isNotEmpty) ...[
-                        _buildSummaryCard(),
-                        const SizedBox(height: 12),
-                      ],
-                      if (_loading)
-                        const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(48),
-                            child: CircularProgressIndicator(),
+              child: _PiutangFiltersSection(
+                searchController: _searchController,
+                searchColumn: _searchColumn,
+                onSearchColumnChanged: (newCol) {
+                  setState(() {
+                    _searchColumn = newCol;
+                    _page = 0;
+                    _persistFilterState();
+                  });
+                  _load();
+                },
+                searchFocus: _searchFocus,
+                onSearchSubmitted: _onSearchSubmitted,
+                size: _size,
+                startDate: _startDate,
+                endDate: _endDate,
+                selectedEmpCodes: _empCodes,
+                availableEmpCodes: _availableEmpCodes,
+                selectedCategories: _categories,
+                availableCategories: _availableCategories,
+                onApply: (size, start, end, empCodes, categories) {
+                  setState(() {
+                    _size = size;
+                    _startDate = start;
+                    _endDate = end;
+                    _empCodes = empCodes;
+                    _categories = categories;
+                    _page = 0;
+                    _persistFilterState();
+                  });
+                  _load();
+                },
+                onDateRangeClear: () {
+                  setState(() {
+                    _startDate = null;
+                    _endDate = null;
+                    _page = 0;
+                    _persistFilterState();
+                  });
+                  _load();
+                },
+                onExport: _export,
+                isAdmin: _isAdminOrManager,
+                content: RefreshIndicator(
+                  onRefresh: _load,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (!_loading &&
+                            _totalGrandSum != null &&
+                            _items.isNotEmpty) ...[
+                          _PiutangSummaryCard(
+                            grandSum: _totalGrandSum,
+                            tab: _tab,
                           ),
-                        )
-                      else if (_error != null)
-                        _ErrorSection(message: _error!, onRetry: _load)
-                      else if (_items.isEmpty)
-                        _EmptySection(
-                          emptyLabel: _tab == 'UNPAID'
-                              ? 'Tidak ada transaksi belum dibayar'
-                              : 'Tidak ada transaksi sudah dibayar',
-                        )
-                      else if (isMobile)
-                        _PiutangDeckView(items: _items)
-                      else
-                        CustomPlutoDataGrid<PiutangItem>(
-                          data: _items,
-                          totalPage: _totalPages,
-                          currentPage: _page + 1,
-                          totalElements: _totalElements,
-                          onPageChanged: (newPage) {
-                            setState(() {
-                              _page = newPage - 1;
-                              _persistFilterState();
-                            });
-                            _load();
-                          },
-                          buildColumns: (ctx) =>
-                              PiutangGridHelper.getColumns(ctx),
-                          buildRows: (data) =>
-                              PiutangGridHelper.mapToRows(data),
-                        ),
-                      if (!_loading && _items.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        _PaginationBar(
-                          page: _page,
-                          totalPages: _totalPages,
-                          totalElements: _totalElements,
-                          onPrev: _totalPages > 0 && _page > 0
-                              ? () {
-                                  setState(() {
-                                    _page--;
-                                    _persistFilterState();
-                                  });
-                                  _load();
-                                }
-                              : null,
-                          onNext: _totalPages > 0 && _page < _totalPages - 1
-                              ? () {
-                                  setState(() {
-                                    _page++;
-                                    _persistFilterState();
-                                  });
-                                  _load();
-                                }
-                              : null,
-                        ),
+                          const SizedBox(height: 16),
+                        ],
+                        if (_loading)
+                          const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(32),
+                              child: CircularProgressIndicator(),
+                            ),
+                          )
+                        else if (_error != null)
+                          _ErrorSection(message: _error!, onRetry: _load)
+                        else if (_items.isEmpty)
+                          _EmptySection(
+                            emptyLabel: _tab == 'UNPAID'
+                                ? 'Tidak ada transaksi belum dibayar'
+                                : 'Tidak ada transaksi sudah dibayar',
+                          )
+                        else if (isMobile)
+                          _PiutangGroupedDeckView(items: _items)
+                        else
+                          CustomPlutoDataGrid<PiutangItem>(
+                            data: _items,
+                            totalPage: _totalPages,
+                            currentPage: _page + 1,
+                            totalElements: _totalElements,
+                            onPageChanged: (newPage) {
+                              setState(() {
+                                _page = newPage - 1;
+                                _persistFilterState();
+                              });
+                              _load();
+                            },
+                            buildColumns: (ctx) =>
+                                PiutangGridHelper.getColumns(ctx),
+                            buildRows: (data) =>
+                                PiutangGridHelper.mapToRows(data),
+                          ),
+                        if (!_loading && _items.isNotEmpty && isMobile) ...[
+                          const SizedBox(height: 16),
+                          _PaginationBar(
+                            page: _page,
+                            totalPages: _totalPages,
+                            totalElements: _totalElements,
+                            onPrev: _totalPages > 0 && _page > 0
+                                ? () {
+                                    setState(() {
+                                      _page--;
+                                      _persistFilterState();
+                                    });
+                                    _load();
+                                  }
+                                : null,
+                            onNext: _totalPages > 0 && _page < _totalPages - 1
+                                ? () {
+                                    setState(() {
+                                      _page++;
+                                      _persistFilterState();
+                                    });
+                                    _load();
+                                  }
+                                : null,
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -501,113 +438,505 @@ class _PiutangContentState extends State<_PiutangContent> {
       ),
     );
   }
+}
 
-  Widget _buildFilterAction({
-    required IconData icon,
-    required String label,
-    required bool active,
-    required VoidCallback onTap,
-  }) {
-    return ActionChip(
-      avatar: Icon(icon, size: 16),
-      label: Text(label),
-      backgroundColor: active
-          ? Theme.of(context).colorScheme.primaryContainer
-          : null,
-      onPressed: onTap,
-    );
+class _PiutangSummaryCard extends StatelessWidget {
+  const _PiutangSummaryCard({required this.grandSum, required this.tab});
+  final Object? grandSum;
+  final String tab;
+
+  static String _rp(Object? x) {
+    if (x == null) return '—';
+    final n = num.tryParse(x.toString().replaceAll(RegExp(r'[^\d.-]'), ''));
+    if (n == null) return x.toString();
+    return ' ${_addThousandSeparator(n.toInt().abs().toString())}';
   }
 
-  Widget _buildSearchField(ThemeData theme) {
-    return TextField(
-      controller: _searchController,
-      decoration: InputDecoration(
-        hintText: 'Cari no nota / user / barang / dept...',
-        prefixIcon: const Icon(Icons.search, size: 20),
-        isDense: true,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-      onSubmitted: (v) {
-        setState(() {
-          _search = v.trim();
-          _page = 0;
-        });
-        _persistFilterState();
-        _load();
-      },
-    );
+  static String _addThousandSeparator(String number) {
+    final reversed = number.split('').reversed.join();
+    final chunks = <String>[];
+    for (int i = 0; i < reversed.length; i += 3) {
+      final end = (i + 3 < reversed.length) ? i + 3 : reversed.length;
+      chunks.add(reversed.substring(i, end));
+    }
+    return chunks.join('.').split('').reversed.join();
   }
 
-  Widget _buildSummaryCard() {
-    final theme = Theme.of(context);
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(12),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            _tab == 'UNPAID'
-                ? 'Total Piutang Belum Dibayar'
-                : 'Total Sudah Dibayar',
-            style: theme.textTheme.titleSmall,
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: tab == 'UNPAID' ? Colors.orange.shade50 : Colors.green.shade50,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              tab == 'UNPAID'
+                  ? Icons.pending_actions_rounded
+                  : Icons.task_alt_rounded,
+              color: tab == 'UNPAID'
+                  ? Colors.orange.shade700
+                  : Colors.green.shade700,
+              size: 24,
+            ),
           ),
-          Text(
-            _formatCurrency(_totalGrandSum),
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: theme.colorScheme.primary,
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  tab == 'UNPAID'
+                      ? 'Total Piutang Belum Dibayar'
+                      : 'Total Piutang Sudah Dibayar',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _rp(grandSum),
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1F2937),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
     );
   }
+}
+
+class _PiutangFiltersSection extends StatefulWidget {
+  const _PiutangFiltersSection({
+    required this.searchController,
+    required this.searchColumn,
+    required this.onSearchColumnChanged,
+    required this.searchFocus,
+    required this.onSearchSubmitted,
+    required this.size,
+    required this.startDate,
+    required this.endDate,
+    required this.selectedEmpCodes,
+    required this.availableEmpCodes,
+    required this.selectedCategories,
+    required this.availableCategories,
+    required this.onApply,
+    required this.onDateRangeClear,
+    required this.onExport,
+    required this.isAdmin,
+    required this.content,
+  });
+
+  final TextEditingController searchController;
+  final String searchColumn;
+  final ValueChanged<String> onSearchColumnChanged;
+  final FocusNode searchFocus;
+  final VoidCallback onSearchSubmitted;
+  final int size;
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final List<String> selectedEmpCodes;
+  final List<String> availableEmpCodes;
+  final List<String> selectedCategories;
+  final List<String> availableCategories;
+  final void Function(
+    int size,
+    DateTime? startDate,
+    DateTime? endDate,
+    List<String> selectedEmpCodes,
+    List<String> categories,
+  ) onApply;
+  final VoidCallback onDateRangeClear;
+  final VoidCallback onExport;
+  final bool isAdmin;
+  final Widget content;
+
+  @override
+  State<_PiutangFiltersSection> createState() => _PiutangFiltersSectionState();
+}
+
+class _PiutangFiltersSectionState extends State<_PiutangFiltersSection> {
+  late int _size;
+  DateTime? _startDate;
+  DateTime? _endDate;
+  List<String> _selectedEmpCodes = [];
+  List<String> _selectedCategories = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _resetToCurrent();
+  }
+
+  void _resetToCurrent() {
+    _size = widget.size;
+    _startDate = widget.startDate;
+    _endDate = widget.endDate;
+    _selectedEmpCodes = List<String>.from(widget.selectedEmpCodes);
+    _selectedCategories = List<String>.from(widget.selectedCategories);
+  }
+
+  @override
+  void didUpdateWidget(_PiutangFiltersSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.size != widget.size ||
+        oldWidget.startDate != widget.startDate ||
+        oldWidget.endDate != widget.endDate ||
+        oldWidget.selectedEmpCodes != widget.selectedEmpCodes ||
+        oldWidget.selectedCategories != widget.selectedCategories) {
+      _resetToCurrent();
+    }
+  }
 
   static String _fmt(DateTime? d) {
-    if (d == null) return '-';
+    if (d == null) return 'Pilih';
     return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
   }
 
-  static String _formatCurrency(Object? v) {
-    if (v == null) return 'Rp0';
-    final n = double.tryParse(v.toString().replaceAll(RegExp(r'[^\d.-]'), ''));
-    if (n == null) return v.toString();
-    final s = n.abs().toStringAsFixed(0);
-    final b = StringBuffer();
-    for (var i = 0; i < s.length; i++) {
-      final digit = s[s.length - 1 - i];
-      b.write(digit);
-      if (i % 3 == 2 && i != s.length - 1) b.write('.');
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final activeFilterBadges = <Widget>[];
+
+    if (widget.startDate != null || widget.endDate != null) {
+      activeFilterBadges.add(
+        FilterBadge(
+          label: '${_fmt(widget.startDate)} - ${_fmt(widget.endDate)}',
+          onRemove: widget.onDateRangeClear,
+        ),
+      );
     }
-    final digits = b.toString().split('').reversed.join();
-    return 'Rp$digits';
+    if (widget.selectedEmpCodes.isNotEmpty) {
+      activeFilterBadges.add(
+        FilterBadge(
+          label: 'Karyawan: ${widget.selectedEmpCodes.length} Terpilih',
+          onRemove: () {
+            widget.onApply(
+              widget.size,
+              widget.startDate,
+              widget.endDate,
+              [],
+              widget.selectedCategories,
+            );
+          },
+        ),
+      );
+    }
+
+    if (widget.selectedCategories.isNotEmpty) {
+      activeFilterBadges.add(
+        FilterBadge(
+          label: 'Kategori: ${widget.selectedCategories.length} Terpilih',
+          onRemove: () {
+            widget.onApply(
+              widget.size,
+              widget.startDate,
+              widget.endDate,
+              widget.selectedEmpCodes,
+              [],
+            );
+          },
+        ),
+      );
+    }
+
+    return FixedSearchFilterLayout(
+      searchBar: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: widget.searchColumn,
+                items: const [
+                  DropdownMenuItem(value: 'ALL', child: Text('Semua Kolom')),
+                  DropdownMenuItem(value: 'noNota', child: Text('No Nota')),
+                  DropdownMenuItem(value: 'barang', child: Text('Barang')),
+                  DropdownMenuItem(value: 'user', child: Text('User')),
+                  DropdownMenuItem(value: 'dept', child: Text('Dept')),
+                ],
+                onChanged: (val) {
+                  if (val != null) widget.onSearchColumnChanged(val);
+                },
+                style: theme.textTheme.bodyMedium,
+                icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ModernSearchBar(
+              controller: widget.searchController,
+              focusNode: widget.searchFocus,
+              onSubmitted: widget.onSearchSubmitted,
+              hintText:
+                  'Cari di ${widget.searchColumn == 'ALL' ? 'Semua Kolom' : widget.searchColumn}...',
+              onChanged: (_) {},
+            ),
+          ),
+        ],
+      ),
+      filterTitle: 'Filter & Urutkan',
+      activeFilterBadges:
+          activeFilterBadges.isNotEmpty ? activeFilterBadges : null,
+      filterContentBuilder: (close, refresh) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 16),
+          FilterGroup(
+            title: 'Rentang Tanggal',
+            icon: Icons.date_range_rounded,
+            children: [
+              ModernDateChip(
+                label: _fmt(_startDate),
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _startDate ?? DateTime.now(),
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                  );
+                  if (picked != null) {
+                    setState(() {
+                      _startDate = picked;
+                      if (_endDate != null && _endDate!.isBefore(picked)) {
+                        _endDate = picked;
+                      }
+                    });
+                    refresh();
+                  }
+                },
+                selected: _startDate != null,
+              ),
+              const SizedBox(width: 8),
+              Text('–', style: theme.textTheme.bodyMedium),
+              const SizedBox(width: 8),
+              ModernDateChip(
+                label: _fmt(_endDate),
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _endDate ?? DateTime.now(),
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                  );
+                  if (picked != null) {
+                    setState(() {
+                      _endDate = picked;
+                      if (_startDate != null && _startDate!.isAfter(picked)) {
+                        _startDate = picked;
+                      }
+                    });
+                    refresh();
+                  }
+                },
+                selected: _endDate != null,
+              ),
+            ],
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const FilterLabel('Kode Karyawan'),
+              MultiSelectSearchableDropdown<String>(
+                values: _selectedEmpCodes,
+                options: widget.availableEmpCodes,
+                onChanged: (v) {
+                  setState(() => _selectedEmpCodes = v);
+                  refresh();
+                },
+                hintText: 'Semua Karyawan',
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const FilterLabel('Kategori (Dept)'),
+              MultiSelectSearchableDropdown<String>(
+                values: _selectedCategories,
+                options: widget.availableCategories,
+                onChanged: (v) {
+                  setState(() => _selectedCategories = v);
+                  refresh();
+                },
+                hintText: 'Semua Kategori',
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const FilterLabel('Item per halaman'),
+              CompactFilterDropdown<int>(
+                label: 'Item per halaman',
+                value: _size,
+                options: const [10, 20, 50, 100],
+                displayText: (s) => '$s item',
+                onChanged: (v) {
+                  if (v != null) {
+                    setState(() => _size = v);
+                    refresh();
+                  }
+                },
+              ),
+            ],
+          ),
+          FilterFooter(
+            onApply: () {
+              widget.onApply(
+                _size,
+                _startDate,
+                _endDate,
+                _selectedEmpCodes,
+                _selectedCategories,
+              );
+              close();
+            },
+            onReset: () {
+              widget.onDateRangeClear();
+              setState(() {
+                _size = 50;
+                _startDate = null;
+                _endDate = null;
+                _selectedEmpCodes = [];
+                _selectedCategories = [];
+              });
+              widget.onApply(
+                _size,
+                _startDate,
+                _endDate,
+                _selectedEmpCodes,
+                _selectedCategories,
+              );
+              close();
+            },
+            additionalAction: widget.isAdmin
+                ? OutlinedButton.icon(
+                    onPressed: () {
+                      close();
+                      widget.onExport();
+                    },
+                    icon: const Icon(Icons.download_rounded, size: 18),
+                    label: const Text('Export ke Excel'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF107C41),
+                      side: const BorderSide(color: Color(0xFF107C41)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  )
+                : null,
+          ),
+        ],
+      ),
+      child: widget.content,
+    );
   }
 }
 
-/// Cards mobile piutang — satu card = satu baris penjualan.
-class _PiutangDeckView extends StatelessWidget {
-  const _PiutangDeckView({required this.items});
+class _PiutangGroupedDeckView extends StatelessWidget {
+  const _PiutangGroupedDeckView({required this.items});
   final List<PiutangItem> items;
+
+  static String _v(Object? x) =>
+      x?.toString().trim().isEmpty ?? true ? '—' : x.toString();
+
+  static String _rp(Object? x) {
+    if (x == null) return '—';
+    final n = num.tryParse(x.toString().replaceAll(RegExp(r'[^\d.-]'), ''));
+    if (n == null) return x.toString();
+    final reversed = n.toInt().abs().toString().split('').reversed.join();
+    final chunks = <String>[];
+    for (int i = 0; i < reversed.length; i += 3) {
+      final end = (i + 3 < reversed.length) ? i + 3 : reversed.length;
+      chunks.add(reversed.substring(i, end));
+    }
+    final formatted = chunks.join('.').split('').reversed.join();
+    return ' $formatted';
+  }
+
+  static String _fmtDate(Object? d) {
+    if (d == null) return '—';
+    final str = d.toString();
+    if (str.isEmpty) return '—';
+    try {
+      final date = DateTime.tryParse(str);
+      if (date != null) {
+        return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+      }
+    } catch (_) {}
+    return str;
+  }
 
   @override
   Widget build(BuildContext context) {
-    return ListView.separated(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: items.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
+    if (items.isEmpty) return const SizedBox.shrink();
+
+    final grouped = <String, List<PiutangItem>>{};
+    for (final s in items) {
+      final key = _v(s.docNo);
+      grouped.putIfAbsent(key, () => []).add(s);
+    }
+
+    final keys = grouped.keys.toList();
+
+    return ResponsiveDeckGrid(
+      itemCount: keys.length,
       itemBuilder: (context, i) {
-        final it = items[i];
+        final docNo = keys[i];
+        final group = grouped[docNo]!;
+        final first = group.first;
+
+        double groupTotal = 0;
+        for (final s in group) {
+          final gt = double.tryParse(s.grandTotal?.toString() ?? '0') ?? 0;
+          groupTotal += gt;
+        }
+
         final isPaid =
-            (it.statusBayar ?? '').toUpperCase() == 'PAID' ||
-            (it.statusBayar ?? '').toUpperCase() == 'LUNAS';
+            (first.statusBayar ?? '').toUpperCase() == 'PAID' ||
+            (first.statusBayar ?? '').toUpperCase() == 'LUNAS';
+
         return DataDeckCard(
-          title: it.docNo ?? '—',
-          subtitle: it.parName ?? '—',
+          headerLeft: _fmtDate(first.docDate),
+          headerRight: 'No. $docNo',
+          title: _v(first.parName),
           chip: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
@@ -616,7 +945,7 @@ class _PiutangDeckView extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
-              it.statusBayar ?? '—',
+              first.statusBayar ?? '—',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
@@ -625,92 +954,185 @@ class _PiutangDeckView extends StatelessWidget {
             ),
           ),
           rows: [
-            (label: 'Marketing', value: it.empCode ?? '—'),
-            (label: 'Barang', value: it.itemName ?? '—'),
-            (label: 'Qty', value: it.qty?.toString() ?? '—'),
-            (label: 'Tanggal', value: _fmtDate(it.docDate)),
-            (label: 'Total', value: _currency(it.grandTotal)),
-            (
-              label: 'Terbayar',
-              value: it.paidTotal == null ? '—' : _currency(it.paidTotal),
-            ),
+            (label: 'Total Transaksi', value: _rp(groupTotal)),
+            (label: 'Marketing Code', value: _v(first.empCode)),
           ],
+          onTap: () => _showDetailSheet(context, docNo, group),
         );
       },
     );
   }
 
-  static String _fmtDate(Object? d) {
-    if (d == null) return '—';
-    final dt = DateTime.tryParse(d.toString());
-    if (dt == null) return d.toString();
-    return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
-  }
-
-  static String _currency(Object? v) {
-    if (v == null) return 'Rp0';
-    final n = double.tryParse(v.toString().replaceAll(RegExp(r'[^\d.-]'), ''));
-    if (n == null) return v.toString();
-    return 'Rp${n.abs().toStringAsFixed(0)}';
-  }
-}
-
-class _MultiSelectDialog<T> extends StatefulWidget {
-  const _MultiSelectDialog({
-    required this.title,
-    required this.options,
-    required this.selected,
-  });
-
-  final String title;
-  final List<T> options;
-  final List<T> selected;
-
-  @override
-  State<_MultiSelectDialog<T>> createState() => _MultiSelectDialogState<T>();
-}
-
-class _MultiSelectDialogState<T> extends State<_MultiSelectDialog<T>> {
-  late final Set<T> _selected = widget.selected.toSet();
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.title),
-      content: SizedBox(
-        width: 320,
-        child: ListView(
-          shrinkWrap: true,
+  static void _showDetailSheet(
+      BuildContext context, String docNo, List<PiutangItem> group) {
+    final first = group.first;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(ctx).size.height * 0.85,
+        ),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black12, blurRadius: 20, offset: Offset(0, -4)),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            for (final opt in widget.options)
-              CheckboxListTile(
-                dense: true,
-                controlAffinity: ListTileControlAffinity.leading,
-                title: Text('$opt'),
-                value: _selected.contains(opt),
-                onChanged: (v) {
-                  setState(() {
-                    if (v == true) {
-                      _selected.add(opt);
-                    } else {
-                      _selected.remove(opt);
-                    }
-                  });
-                },
+            const SizedBox(height: 12),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
               ),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Detail Piutang',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey.shade900,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    'No. Nota: $docNo',
+                                    style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.grey.shade700,
+                                        fontWeight: FontWeight.w600),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                IconButton(
+                                  icon: const Icon(Icons.content_copy_rounded,
+                                      size: 12),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () {
+                                    Clipboard.setData(
+                                        ClipboardData(text: docNo));
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Nomor Nota disalin'),
+                                        duration: Duration(seconds: 1),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                  },
+                                  color: Colors.grey.shade400,
+                                ),
+                              ],
+                            ),
+                            Text(
+                              'Partner: ${_v(first.parName)}',
+                              style: TextStyle(
+                                  fontSize: 13, color: Colors.grey.shade600),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            'Total Grand Sum',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey.shade500,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          Text(
+                            _rp(group.fold<double>(
+                                0,
+                                (prev, element) =>
+                                    prev +
+                                    (double.tryParse(
+                                            element.grandTotal?.toString() ??
+                                                '0') ??
+                                        0))),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: LayoutBuilder(builder: (context, constraints) {
+                  final isMobileDetail = constraints.maxWidth < 600;
+                  return ResponsiveDataTable(
+                    minColumnWidth: isMobileDetail ? 180 : 180,
+                    columns: [
+                      if (!isMobileDetail) ...[
+                        const DataColumn(label: Text('Tanggal')),
+                        const DataColumn(label: Text('No Nota')),
+                        const DataColumn(label: Text('Nama User')),
+                      ],
+                      const DataColumn(label: Text('Barang')),
+                      const DataColumn(label: Text('Qty')),
+                      const DataColumn(label: Text('Total')),
+                      const DataColumn(label: Text('Terbayar')),
+                      const DataColumn(label: Text('Marketing')),
+                    ],
+                    rows: group.map((s) {
+                      return DataRow(cells: [
+                        if (!isMobileDetail) ...[
+                          DataCell(Text(_fmtDate(s.docDate))),
+                          DataCell(CopyableTextCell(text: _v(s.docNo))),
+                          DataCell(Text(_v(s.parName))),
+                        ],
+                        DataCell(CopyableTextCell(text: _v(s.itemName))),
+                        DataCell(Text(_v(s.qty))),
+                        DataCell(Text(_rp(s.grandTotal))),
+                        DataCell(Text(_rp(s.paidTotal))),
+                        DataCell(Text(_v(s.empCode))),
+                      ]);
+                    }).toList(),
+                  );
+                }),
+              ),
+            ),
+            const SizedBox(height: 20),
           ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Batal'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, _selected.toList()),
-          child: const Text('Terapkan'),
-        ),
-      ],
     );
   }
 }
@@ -723,7 +1145,6 @@ class _PaginationBar extends StatelessWidget {
     this.onPrev,
     this.onNext,
   });
-
   final int page;
   final int totalPages;
   final int totalElements;
@@ -732,32 +1153,47 @@ class _PaginationBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          'Total $totalElements transaksi',
-          style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-        ),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton.filled(
-              onPressed: onPrev,
-              icon: const Icon(Icons.chevron_left),
-              visualDensity: VisualDensity.compact,
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Flexible(
+            child: Text(
+              'Halaman ${page + 1} dari ${totalPages > 0 ? totalPages : 1} • Total $totalElements item',
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+              overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(width: 8),
-            Text('${page + 1}/${totalPages > 0 ? totalPages : 1}'),
-            const SizedBox(width: 8),
-            IconButton.filled(
-              onPressed: onNext,
-              icon: const Icon(Icons.chevron_right),
-              visualDensity: VisualDensity.compact,
-            ),
-          ],
-        ),
-      ],
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton.filled(
+                onPressed: onPrev,
+                icon: const Icon(Icons.chevron_left),
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.grey.shade200,
+                  foregroundColor: Colors.grey.shade800,
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filled(
+                onPressed: onNext,
+                icon: const Icon(Icons.chevron_right),
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.grey.shade200,
+                  foregroundColor: Colors.grey.shade800,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -769,13 +1205,21 @@ class _ErrorSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 40),
+    return Container(
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.error_outline, size: 48, color: Colors.red.shade300),
-          const SizedBox(height: 12),
-          Text(message, textAlign: TextAlign.center),
+          const SizedBox(height: 16),
+          Text(message,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade700)),
           const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: onRetry,
@@ -794,13 +1238,23 @@ class _EmptySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 48),
+    return Container(
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.inbox_outlined, size: 48, color: Colors.grey.shade400),
-          const SizedBox(height: 12),
-          Text(emptyLabel, style: TextStyle(color: Colors.grey.shade600)),
+          const SizedBox(height: 16),
+          Text(
+            emptyLabel,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey.shade600),
+          ),
         ],
       ),
     );
