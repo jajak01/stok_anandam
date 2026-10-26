@@ -5,6 +5,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:stok_anandam/core/auth/current_user_store.dart';
 import 'package:stok_anandam/core/widgets/app_feedback.dart';
+import 'package:stok_anandam/core/widgets/app_version_label.dart';
 import 'package:stok_anandam/core/routing/app_router.dart';
 import 'package:stok_anandam/injection.dart';
 import 'package:local_auth/local_auth.dart';
@@ -217,6 +218,19 @@ class _LoginPageState extends State<LoginPage> {
                                     },
                                   ),
                                 ),
+                        ),
+                      ),
+                    ),
+                    // Versi aplikasi (dari pubspec.yaml) di bagian bawah layar,
+                    // supaya pengguna tahu build mana yang sedang dipakai.
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 14, top: 4),
+                      child: AppVersionLabel(
+                        textStyle: TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF94A3B8),
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.4,
                         ),
                       ),
                     ),

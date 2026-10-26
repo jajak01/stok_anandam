@@ -1,12 +1,12 @@
 #define MyAppName "Movva"
 #define MyAppFullBrand "Movva by Anandam.id"
-#define MyAppVersion "1.1"
+#define MyAppVersion "1.1.39"
 #define MyAppPublisher "AnandamComputer"
 #define MyAppExeName "stok_anandam.exe"
 
 [Setup]
 OutputDir=D:\Idos\Coding\Flutter\ReleseAPP\Output
-OutputBaseFilename=Movva_Setup_v1.1
+OutputBaseFilename=Movva_Setup_v1.1.39
 
 AppName={#MyAppFullBrand}
 AppVersion={#MyAppVersion}

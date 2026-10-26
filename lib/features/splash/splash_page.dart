@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
 import 'package:stok_anandam/core/auth/current_user_store.dart';
 import 'package:stok_anandam/core/routing/app_router.dart';
+import 'package:stok_anandam/core/widgets/app_version_label.dart';
 import 'package:stok_anandam/injection.dart';
 import 'package:stok_anandam/token_storage.dart';
 
@@ -434,6 +435,18 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
                                         color: Color(0xFF64748B),
                                         fontWeight: FontWeight.w500,
                                         letterSpacing: 0.3,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  FadeTransition(
+                                    opacity: _textFadeAnimation,
+                                    child: const AppVersionLabel(
+                                      textStyle: TextStyle(
+                                        fontSize: 11,
+                                        color: Color(0xFF94A3B8),
+                                        fontWeight: FontWeight.w500,
+                                        letterSpacing: 0.4,
                                       ),
                                     ),
                                   ),
